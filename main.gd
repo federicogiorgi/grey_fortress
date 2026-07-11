@@ -12,6 +12,7 @@ extends Node2D
 #     with a thunder rumble and a brief screen flash)
 #   - Second, stronger item tier at every vendor; world loot
 #     (outposts) is now clearly the most powerful gear
+#   - Half of the slain mobs respawn when you re-enter a map
 #
 #  v4: unique vendor symbols, shop sell/buyback, victory screen,
 #  clickable HUD buttons, Android support removed (Steam only)
@@ -248,7 +249,7 @@ func _ready() -> void:
 	music.volume_db = -9.0
 	add_child(music)
 	rain_player = AudioStreamPlayer.new()
-	rain_player.volume_db = -8.0
+	rain_player.volume_db = -12.0
 	var rain_stream: AudioStreamOggVorbis = load("res://audio/rain.ogg")
 	rain_stream.loop = true
 	rain_player.stream = rain_stream
@@ -364,7 +365,8 @@ func _polled_dir() -> Vector2i:
 # ---------------------------------------------------------
 func _load_map(id: String, arrive: String) -> void:
 	current_map = id
-	if not map_state.has(id):
+	var revisit := map_state.has(id)
+	if not revisit:
 		map_state[id] = _generate_map(id)
 	var st: Dictionary = map_state[id]
 	grid = st["grid"]
@@ -379,6 +381,8 @@ func _load_map(id: String, arrive: String) -> void:
 			player_pos = st["south_gate"] + Vector2i(0, -1)
 		"north_gate":
 			player_pos = st["north_gate"] + Vector2i(0, 1)
+	if revisit:
+		_respawn_mobs()
 	camera.limit_left = 0
 	# The camera has a +BAR_H/2 vertical offset (so the player is centered
 	# in the area above the HUD bar). Offsets are applied AFTER limits in
@@ -559,7 +563,12 @@ func _place_temple(g: Array, x0: int, y0: int, altars: Array) -> void:
 	altars.append(Vector2i(x0 + 3, y0 + 2))
 	g[y0][x0 + 3] = "D"
 
-func _spawn_mobs(g: Array, rng: RandomNumberGenerator, counts: Dictionary, w: int, h: int, avoid: Vector2i) -> Array:
+# Places counts of mobs on free grass, away from `avoid` (the player's
+# entry point) and from any mob already in `existing`.
+func _spawn_mobs(g: Array, rng: RandomNumberGenerator, counts: Dictionary, w: int, h: int, avoid: Vector2i, existing: Array = []) -> Array:
+	var taken := {}
+	for m in existing:
+		taken[m["pos"]] = true
 	var ms := []
 	for type in counts.keys():
 		var placed := 0
@@ -567,20 +576,35 @@ func _spawn_mobs(g: Array, rng: RandomNumberGenerator, counts: Dictionary, w: in
 		while placed < counts[type] and tries < 4000:
 			tries += 1
 			var p := Vector2i(rng.randi_range(2, w - 3), rng.randi_range(2, h - 3))
-			if g[p.y][p.x] != ".":
+			if g[p.y][p.x] != "." or taken.has(p):
 				continue
 			if abs(p.x - avoid.x) + abs(p.y - avoid.y) < 18:
 				continue
-			var clash := false
-			for m in ms:
-				if m["pos"] == p:
-					clash = true
-					break
-			if clash:
-				continue
+			taken[p] = true
 			ms.append({ "pos": p, "hp": MOB_TYPES[type]["hp"], "type": type })
 			placed += 1
 	return ms
+
+# On re-entering a map, half of the slain mobs (rounded up, per type)
+# come back, placed away from where the player arrives.
+func _respawn_mobs() -> void:
+	var counts: Dictionary = MAP_DEFS[current_map]["mobs"]
+	if counts.is_empty():
+		return
+	var alive := {}
+	for m in mobs:
+		alive[m["type"]] = alive.get(m["type"], 0) + 1
+	var to_spawn := {}
+	for type in counts:
+		var back := int(ceil((counts[type] - alive.get(type, 0)) * 0.5))
+		if back > 0:
+			to_spawn[type] = back
+	if to_spawn.is_empty():
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.randomize()
+	mobs.append_array(_spawn_mobs(grid, rng, to_spawn,
+			grid[0].size(), grid.size(), player_pos, mobs))
 
 
 # ---------------------------------------------------------
@@ -787,30 +811,29 @@ func _shop_input(key: int) -> void:
 		if idx < stock.size():
 			_buy_item(stock[idx])
 		return
-	var count := _shop_actionable_count()
 	match key:
 		KEY_UP, KEY_W:
 			shop_index = max(shop_index - 1, 0)
 			_refresh()
 		KEY_DOWN, KEY_S:
-			shop_index = min(shop_index + 1, count - 1)
+			shop_index = min(shop_index + 1, _shop_actionable().size() - 1)
 			_refresh()
 		KEY_ENTER, KEY_KP_ENTER, KEY_E:
-			var act := 0
-			for e in shop_entries():
-				if e["kind"] == "header" or e["kind"] == "note":
-					continue
-				if act == shop_index:
-					_shop_action(e)
-					return
-				act += 1
+			var actionable := _shop_actionable()
+			if shop_index < actionable.size():
+				_shop_action(actionable[shop_index])
 
 
 # ---------------------------------------------------------
 #  Shop panel data: one flat list of rows (headers, notes and
 #  actionable buy/sell/buyback entries). hud.gd draws this list
-#  and the click handler below hit-tests the same rows.
+#  and the click handler below hit-tests the same rows, using
+#  the shared SHOP_* geometry so the two can never drift apart.
 # ---------------------------------------------------------
+const SHOP_W := 660.0      # panel width
+const SHOP_TOP := 58.0     # y of the first row inside the panel
+const SHOP_ROW_H := 20.0
+
 func shop_entries() -> Array:
 	var entries := []
 	var vd: Dictionary = VENDORS[current_shop]
@@ -835,12 +858,11 @@ func shop_entries() -> Array:
 		entries.append({ "kind": "buyback", "id": bb[i]["id"], "price": bb[i]["price"], "bb_idx": i })
 	return entries
 
-func _shop_actionable_count() -> int:
-	var n := 0
-	for e in shop_entries():
-		if e["kind"] != "header" and e["kind"] != "note":
-			n += 1
-	return n
+# The buy/sell/buyback rows only, in display order; shop_index
+# selects into this list.
+func _shop_actionable() -> Array:
+	return shop_entries().filter(
+			func(e): return e["kind"] != "header" and e["kind"] != "note")
 
 func _shop_action(e: Dictionary) -> void:
 	match e["kind"]:
@@ -850,23 +872,21 @@ func _shop_action(e: Dictionary) -> void:
 			_sell_item(e["id"])
 		"buyback":
 			_buyback_item(e["bb_idx"])
-	shop_index = clamp(shop_index, 0, max(_shop_actionable_count() - 1, 0))
+	shop_index = clamp(shop_index, 0, max(_shop_actionable().size() - 1, 0))
 	_refresh()
 
-# Geometry here must mirror _draw_panel_shop in hud.gd.
 func _shop_click(mp: Vector2) -> void:
 	var entries := shop_entries()
 	var vs := get_viewport_rect().size
-	var w := 660.0
-	var h := 96.0 + entries.size() * 20.0
-	var px := (vs.x - w) * 0.5
+	var h := 96.0 + entries.size() * SHOP_ROW_H
+	var px := (vs.x - SHOP_W) * 0.5
 	var py := (vs.y - BAR_H - h) * 0.5
 	var act := 0
 	for i in entries.size():
 		var e: Dictionary = entries[i]
 		if e["kind"] == "header" or e["kind"] == "note":
 			continue
-		if Rect2(px + 8, py + 58 + i * 20.0 - 14.0, w - 16.0, 18.0).has_point(mp):
+		if Rect2(px + 8, py + SHOP_TOP + i * SHOP_ROW_H - 14.0, SHOP_W - 16.0, 18.0).has_point(mp):
 			shop_index = act
 			_shop_action(e)
 			return
@@ -879,9 +899,7 @@ func _sell_item(id: String) -> void:
 	if inventory.get(id, 0) <= 0:
 		return
 	var sp := sell_price(id)
-	inventory[id] -= 1
-	if inventory[id] <= 0:
-		inventory.erase(id)
+	_remove_item(id)
 	coins += sp
 	var bb: Array = buyback.get(current_shop, [])
 	bb.push_front({ "id": id, "price": sp })
@@ -899,11 +917,11 @@ func _buyback_item(idx: int) -> void:
 	if coins < e["price"]:
 		_log("Not enough coins. (%s costs %d)" % [ITEMS[id]["name"], e["price"]])
 		return
-	if not inventory.has(id) and inventory.size() >= inv_capacity():
+	if not _pack_has_room(id):
 		_log("Your pack is full.")
 		return
 	coins -= e["price"]
-	inventory[id] = inventory.get(id, 0) + 1
+	_add_item(id)
 	bb.remove_at(idx)
 	_log("You buy back the %s for %d coins." % [ITEMS[id]["name"], e["price"]])
 
@@ -961,10 +979,10 @@ func _pickup_items() -> void:
 	for i in range(ground_items.size() - 1, -1, -1):
 		if ground_items[i]["pos"] == player_pos:
 			var id: String = ground_items[i]["id"]
-			if not inventory.has(id) and inventory.size() >= inv_capacity():
+			if not _pack_has_room(id):
 				_log("You see the %s, but your pack is full!" % ITEMS[id]["name"])
 				continue
-			inventory[id] = inventory.get(id, 0) + 1
+			_add_item(id)
 			ground_items.remove_at(i)
 			_log("You found the %s!" % ITEMS[id]["name"])
 			_gain_xp(10)
@@ -1031,10 +1049,7 @@ func _complete_quest(q: Dictionary) -> void:
 		"coins":
 			coins -= q["need"]
 		"item":
-			var tgt: String = q["target"]
-			inventory[tgt] = inventory.get(tgt, 0) - q["need"]
-			if inventory[tgt] <= 0:
-				inventory.erase(tgt)
+			_remove_item(q["target"], q["need"])
 	var reward_bits := []
 	if q.has("reward_coins"):
 		coins += q["reward_coins"]
@@ -1042,7 +1057,7 @@ func _complete_quest(q: Dictionary) -> void:
 	if q.has("reward_items"):
 		var ri: Dictionary = q["reward_items"]
 		for id in ri.keys():
-			inventory[id] = inventory.get(id, 0) + ri[id]
+			_add_item(id, ri[id])
 			reward_bits.append("%dx %s" % [ri[id], ITEMS[id]["name"]])
 	q["state"] = "done"
 	_log("Quest complete: %s! Reward: %s." % [q["desc"], ", ".join(reward_bits)])
@@ -1071,12 +1086,12 @@ func _buy_item(id: String) -> void:
 		_log("Not enough coins. (%s costs %d)" % [item["name"], item["price"]])
 		_refresh()
 		return
-	if not inventory.has(id) and inventory.size() >= inv_capacity():
+	if not _pack_has_room(id):
 		_log("Your pack is full.")
 		_refresh()
 		return
 	coins -= item["price"]
-	inventory[id] = inventory.get(id, 0) + 1
+	_add_item(id)
 	if item.has("slot"):
 		_log("You buy a %s. Equip it from the inventory (I)." % item["name"])
 	else:
@@ -1093,9 +1108,7 @@ func _use_item(id: String) -> void:
 		_log("You are already at full health.")
 		_refresh()
 		return
-	inventory[id] -= 1
-	if inventory[id] <= 0:
-		inventory.erase(id)
+	_remove_item(id)
 	player_hp = min(player_hp + item["heal"], player_max_hp)
 	_log("You use the %s. (+%d HP, now %d/%d)" % [item["name"], item["heal"], player_hp, player_max_hp])
 	_refresh()
@@ -1111,6 +1124,20 @@ func inv_capacity() -> int:
 		var bag_item: Dictionary = ITEMS[equipment[20]]
 		cap += bag_item.get("bag_slots", 0)
 	return cap
+
+# Every stack change goes through these two, so the "erase empty
+# stacks" rule lives in exactly one place.
+func _add_item(id: String, count: int = 1) -> void:
+	inventory[id] = inventory.get(id, 0) + count
+
+func _remove_item(id: String, count: int = 1) -> void:
+	inventory[id] = inventory.get(id, 0) - count
+	if inventory[id] <= 0:
+		inventory.erase(id)
+
+# Whether one more `id` fits: existing stacks always take one more.
+func _pack_has_room(id: String) -> bool:
+	return inventory.has(id) or inventory.size() < inv_capacity()
 
 func _recalc_stats() -> void:
 	player_dmg = base_dmg
@@ -1134,12 +1161,10 @@ func _equip(id: String) -> void:
 		slot = 12
 	elif slot == 13 and equipment.has(13) and not equipment.has(14):
 		slot = 14
-	inventory[id] -= 1
-	if inventory[id] <= 0:
-		inventory.erase(id)
+	_remove_item(id)
 	if equipment.has(slot):
 		var old: String = equipment[slot]
-		inventory[old] = inventory.get(old, 0) + 1
+		_add_item(old)
 		_log("You swap %s for %s." % [ITEMS[old]["name"], it["name"]])
 	else:
 		_log("Equipped: %s (%s)." % [it["name"], SLOT_NAMES[slot]])
@@ -1157,7 +1182,7 @@ func _unequip(slot: int) -> void:
 		_log("Not enough room in your pack to remove that.")
 		return
 	equipment.erase(slot)
-	inventory[id] = inventory.get(id, 0) + 1
+	_add_item(id)
 	_recalc_stats()
 	_log("Unequipped: %s." % ITEMS[id]["name"])
 
@@ -1378,9 +1403,10 @@ func _set_rain(on: bool) -> void:
 func _weather_tick(delta: float) -> void:
 	if flash_alpha > 0.0:
 		flash_alpha = max(flash_alpha - delta * 2.2, 0.0)
+		hud.queue_redraw()   # keep fading even if the rain just stopped
 	if not raining:
 		return
-	hud.queue_redraw()   # animate the rain streaks and the flash
+	hud.queue_redraw()   # animate the rain streaks
 	lightning_timer -= delta
 	if lightning_timer <= 0.0:
 		lightning_timer = randf_range(8.0, 24.0)

@@ -38,19 +38,23 @@ func _draw() -> void:
 # ---------------- rain overlay ----------------
 # Streaks fall over the world area; positions derive from hashed
 # per-streak constants plus time, so no state is stored anywhere.
+# All segments go into one draw_multiline call.
 func _draw_rain() -> void:
 	var vs := get_viewport_rect().size
 	var t := Time.get_ticks_msec() / 1000.0
 	var world_h := vs.y - BAR_H
 	draw_rect(Rect2(0, 0, vs.x, world_h), Color(0.08, 0.10, 0.18, 0.16))
-	var col := Color(0.62, 0.72, 0.92, 0.32)
+	var pts := PackedVector2Array()
+	pts.resize(220)
 	for i in 110:
 		var sx: float = fposmod(sin(i * 127.1 + 311.7) * 43758.55, 1.0)
 		var sy: float = fposmod(sin(i * 269.5 + 183.3) * 28001.83, 1.0)
 		var speed: float = 540.0 + 380.0 * sx
 		var x: float = fposmod(sx * vs.x + t * 30.0, vs.x)
 		var y: float = fposmod(sy * world_h + t * speed, world_h)
-		draw_line(Vector2(x, y), Vector2(x - 2.5, y + 11.0), col, 1.0)
+		pts[i * 2] = Vector2(x, y)
+		pts[i * 2 + 1] = Vector2(x - 2.5, y + 11.0)
+	draw_multiline(pts, Color(0.62, 0.72, 0.92, 0.32), 1.0)
 
 
 # ---------------- "Entering..." area banner ----------------
@@ -284,17 +288,18 @@ func _draw_panel_journal() -> void:
 
 
 # ---------------- vendor shop (buy / sell / buyback) ----------------
-# Row geometry must mirror _shop_click in main.gd.
+# Row geometry comes from the SHOP_* constants shared with
+# _shop_click in main.gd.
 func _draw_panel_shop() -> void:
 	var vd: Dictionary = game.VENDORS[game.current_shop]
 	var entries: Array = game.shop_entries()
-	var w := 660.0
-	var h: float = 96.0 + entries.size() * 20.0
+	var w: float = game.SHOP_W
+	var h: float = 96.0 + entries.size() * game.SHOP_ROW_H
 	var p := _panel(w, h, "%s     (your coins: %d)" % [vd["name"], game.coins])
 	var act := 0
 	for i in entries.size():
 		var e: Dictionary = entries[i]
-		var yy: float = p.y + 58 + i * 20.0
+		var yy: float = p.y + game.SHOP_TOP + i * game.SHOP_ROW_H
 		match e["kind"]:
 			"header":
 				draw_string(font, Vector2(p.x + 16, yy), e["text"],

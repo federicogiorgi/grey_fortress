@@ -68,7 +68,9 @@ ears, boar tusks, wolf muzzle, skull, troll underbite).
 - Victory: finishing all four quests shows a "Victory!" screen with
   the number of moves the run took; you can keep exploring after
 - Temple altar: full heal, free, the only healing besides food/potions
-- Per-map persistence: dead mobs stay dead
+- Per-map persistence with respawns: each time you re-enter a map,
+  half of the slain mobs (per type, rounded up) come back, placed
+  away from where you arrive
 - "Entering..." banner the first time you reach each area
 - HP (red), Mana (blue), XP (green) bars in the HUD, plus clickable
   Inventory / Journal / Options buttons

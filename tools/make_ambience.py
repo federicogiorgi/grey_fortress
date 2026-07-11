@@ -38,23 +38,25 @@ def make_rain():
     rng = np.random.default_rng(42)
     white = rng.standard_normal(n + SR)
 
-    hiss = np.convolve(white, np.ones(6) / 6, mode="same")
-    wash = np.convolve(white, np.ones(90) / 90, mode="same") * 4.0
+    # gentle mix: the bright hiss is filtered harder and kept quiet,
+    # most of the body comes from the warm low-mid wash
+    hiss = np.convolve(white, np.ones(14) / 14, mode="same")
+    wash = np.convolve(white, np.ones(120) / 120, mode="same") * 5.0
     t = np.arange(len(white)) / SR
     # two gentle swells, periods dividing the loop length
-    swell = (0.90 + 0.10 * np.sin(2 * np.pi * t / (dur / 2))
-                  + 0.06 * np.sin(2 * np.pi * t / (dur / 3) + 1.7))
-    rain = (hiss * 0.35 + wash) * swell
+    swell = (0.92 + 0.08 * np.sin(2 * np.pi * t / (dur / 2))
+                  + 0.04 * np.sin(2 * np.pi * t / (dur / 3) + 1.7))
+    rain = (hiss * 0.18 + wash) * swell
 
-    # occasional individual droplets ("plip") for coziness
-    for _ in range(260):
+    # occasional individual droplets ("plip") for coziness, soft and low
+    for _ in range(150):
         at = rng.uniform(0.0, dur)
-        f = rng.uniform(900, 2600)
+        f = rng.uniform(700, 1700)
         length = int(0.018 * SR)
         tt = np.arange(length) / SR
         plip = np.sin(2 * np.pi * f * tt) * np.exp(-tt / 0.0035)
         i = int(at * SR)
-        rain[i:i + length] += plip * rng.uniform(0.10, 0.30)
+        rain[i:i + length] += plip * rng.uniform(0.05, 0.13)
 
     # seamless loop: crossfade the second of audio past the loop point
     # back into the beginning
@@ -62,7 +64,7 @@ def make_rain():
     out = rain[:n].copy()
     fade = np.linspace(0.0, 1.0, xf)
     out[:xf] = rain[:xf] * fade + rain[n:n + xf] * (1.0 - fade)
-    save("rain.ogg", out, 0.55)
+    save("rain.ogg", out, 0.42)
 
 
 # =========================================================
