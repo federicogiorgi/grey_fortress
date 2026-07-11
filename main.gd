@@ -339,11 +339,13 @@ func _load_map(id: String, arrive: String) -> void:
 		"north_gate":
 			player_pos = st["north_gate"] + Vector2i(0, 1)
 	camera.limit_left = 0
-	camera.limit_top = 0
+	# The camera has a +BAR_H/2 vertical offset (so the player is centered
+	# in the area above the HUD bar). Offsets are applied AFTER limits in
+	# Godot, so both vertical limits must shift by half a bar to match:
+	# top row visible at screen top, bottom row visible just above the bar.
+	camera.limit_top = -BAR_H / 2
 	camera.limit_right = grid[0].size() * TILE
-	# Extra room at the bottom: the map's last row must be able to sit
-	# just above the HUD bar instead of hiding behind it.
-	camera.limit_bottom = grid.size() * TILE + BAR_H
+	camera.limit_bottom = grid.size() * TILE + BAR_H / 2
 	combat_heat = 0
 	_update_music()
 	if not visited.has(id):
