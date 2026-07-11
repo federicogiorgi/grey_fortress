@@ -1,6 +1,8 @@
 # Grey Fortress
 
-A turn-based roguelike prototype in the style of Castle of the Winds, built with Godot 4.
+A turn-based roguelike prototype in the style of Castle of the Winds,
+built with Godot 4. Desktop-only, targeting a Steam release (the Android
+export was removed).
 
 ## How to run
 
@@ -9,19 +11,22 @@ A turn-based roguelike prototype in the style of Castle of the Winds, built with
 
 ## Controls
 
+Movement is keyboard-only; the mouse operates the UI.
+
 - Arrows / WASD: move (bump to attack, talk, pray, pick up)
 - Diagonals: Q/E/Z/C, the numpad (1-9, roguelike layout), or two
   cardinal keys held together
-- Touch or click-and-hold: the hero walks toward your finger/cursor
-  (this is the Android control scheme; it works on desktop too)
-- Mouse: click items in the character sheet to equip/unequip/use
 - Space: wait a turn
 - I: character sheet (equipment paper-doll left, backpack right;
   arrows navigate, Left/Right switch side, Enter equips/uses/removes)
 - J: quest journal
 - Esc: close panels / open options
+- Mouse: the Inventory / Journal / Options buttons in the HUD bar are
+  clickable (click again to close); click items in the character sheet
+  to equip/unequip/use; click rows in a shop to buy/sell/buy back;
+  click options menu entries and drag the volume slider
 - F11: toggle fullscreen
-- Enter: restart after death
+- Enter: restart after death, dismiss the victory screen
 
 ## The world (4 maps, each 4000x3008 px, camera follows you)
 
@@ -42,18 +47,25 @@ so you can never be walled in by the procedural generation.
 - Equipment: all 21 WoW-style slots (ammo through bag); items give
   damage or max HP bonuses; a bag in the Bag slot raises backpack
   capacity from 20 to 28 stacks (no weight limits)
-- Shops: bump a vendor, buy with number keys
-  (Alda: bread; Borin: sword, shield, cap; Cyra: potions, charm;
-  Dolm: cloak, ring, bag)
+- Vendors: each is unique, drawn as a gold badge with a symbol for
+  their trade (Alda: bread loaf; Borin: anvil; Cyra: alchemy flask;
+  Dolm: coin bag) and their name underneath
+- Shops: bump a vendor to trade; buy from their stock (number keys
+  quick-buy), sell your items at half price, and buy back anything
+  you sold at the same price (each vendor remembers the last 8 items
+  you sold them); navigate with Up/Down + Enter or click a row
 - Quests: each vendor gives one on first talk; return when done
   (kill 5 rats, kill 3 goblins, bring 10 coins, fetch the relic)
+- Victory: finishing all four quests shows a "Victory!" screen with
+  the number of moves the run took; you can keep exploring after
 - Temple altar: full heal, free, the only healing besides food/potions
 - Per-map persistence: dead mobs stay dead
 - "Entering..." banner the first time you reach each area
-- HP (red), Mana (blue), XP (green) bars in the HUD
+- HP (red), Mana (blue), XP (green) bars in the HUD, plus clickable
+  Inventory / Journal / Options buttons
 - Options menu (O or Esc): master volume, keybinds, fullscreen;
-  menu items and the sound slider also respond to mouse click/drag
-  (or finger on Android); settings persist to user://settings.cfg
+  menu items and the sound slider also respond to mouse click/drag;
+  settings persist to user://settings.cfg
 - Each wilderness map hides a loot outpost: a small stone keep
   holding a unique item (boots, bow, legplates)
 
@@ -77,6 +89,6 @@ relaxes a few turns after you break contact.
 ## Next steps
 
 - Mob variety per map depth, ranged enemies
-- Equipment slots instead of one-time buys
 - Save/load (serialize map_state + player dict to JSON)
 - Sound effects, title screen
+- Steam integration (achievements, cloud saves)

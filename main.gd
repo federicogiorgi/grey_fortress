@@ -1,17 +1,17 @@
 extends Node2D
 # =============================================================
-#  GREY FORTRESS - v3
+#  GREY FORTRESS - v4
 #
 #  New in this version:
-#   - Maps are 125x94 tiles (4000x3008 px), generated procedurally
-#     with a fixed seed, with a camera following the player
-#   - Four maps: Town -> Northern Wilds -> Dark Forest -> Ancient Ruins
-#   - Six mob types; mobs drop coins and give XP
-#   - Leveling: +3 max HP per level, +1 damage every 2 levels
-#   - Inventory (I), Quest journal (J), vendor shops (bump a vendor)
-#   - Four quests, one per vendor; the Sunstone Relic quest item
-#     sits between two trees in the Ancient Ruins
-#   - Temple altar fully heals
+#   - Vendors are unique: each has a purpose symbol (bread, anvil,
+#     flask, coin bag) with their name drawn underneath
+#   - Shops buy AND sell: sell items at half price, buy them back
+#     at the same price (per-vendor buyback list)
+#   - Victory screen when all four quests are done, showing the
+#     number of moves the run took
+#   - Desktop (Steam) only: Android/touch support removed
+#   - HUD buttons (Inventory / Journal / Options) are clickable;
+#     movement stays keyboard-only
 # =============================================================
 
 enum Mode { PLAY, INVENTORY, JOURNAL, SHOP, OPTIONS }
@@ -106,28 +106,28 @@ const BASE_INV_SLOTS := 20
 
 const VENDORS := [
 	{
-		"name": "Alda the baker", "stock": ["bread"],
+		"name": "Alda the baker", "short": "Alda", "symbol": "bread", "stock": ["bread"],
 		"greet": "Alda: Fresh bread! Well, fresh-ish.",
 		"quest": { "desc": "Kill 5 rats", "type": "kill", "target": "r", "need": 5,
 				"intro": "Rats got into my flour again. Thin their numbers, would you?",
 				"reward_coins": 20, "reward_xp": 15 },
 	},
 	{
-		"name": "Borin the smith", "stock": ["sword", "shield", "cap"],
+		"name": "Borin the smith", "short": "Borin", "symbol": "anvil", "stock": ["sword", "shield", "cap"],
 		"greet": "Borin: Steel solves most problems.",
 		"quest": { "desc": "Kill 3 goblins", "type": "kill", "target": "g", "need": 3,
 				"intro": "Goblins stole a crate of nails. Make them regret it.",
 				"reward_coins": 25, "reward_xp": 15 },
 	},
 	{
-		"name": "Cyra the alchemist", "stock": ["potion", "charm"],
+		"name": "Cyra the alchemist", "short": "Cyra", "symbol": "flask", "stock": ["potion", "charm"],
 		"greet": "Cyra: Potions brewing. Do not rush art.",
 		"quest": { "desc": "Bring me 10 coins", "type": "coins", "need": 10,
 				"intro": "Reagents are expensive. Fund my research with 10 coins?",
 				"reward_items": { "potion": 2 }, "reward_xp": 20 },
 	},
 	{
-		"name": "Dolm the trader", "stock": ["cloak", "ring", "bag"],
+		"name": "Dolm the trader", "short": "Dolm", "symbol": "bag", "stock": ["cloak", "ring", "bag"],
 		"greet": "Dolm: Rare goods for discerning customers.",
 		"quest": { "desc": "Recover the Sunstone Relic from the Ancient Ruins",
 				"type": "item", "target": "relic", "need": 1,
@@ -162,13 +162,16 @@ var coins := 0
 var inventory := {}     # item id -> count (each distinct id = one stack/slot)
 var quests := []
 var current_shop := -1
+var shop_index := 0     # keyboard selection inside the shop panel
+var buyback := {}       # vendor set_idx -> [{id, price}] items sold to them
 
 var messages := []
 var game_over := false
+var move_count := 0
+var victory_banner := false
+var victory_moves := 0
 var held_dir := Vector2i.ZERO
 var move_timer := 0.0
-var touch_active := false
-var touch_pos := Vector2.ZERO
 
 var ui_pane := 1          # inventory screen: 0 = equipment, 1 = backpack
 var ui_index := 0
@@ -224,6 +227,11 @@ func _start() -> void:
 	player_hp = player_max_hp
 	player_mana = player_max_mana
 	game_over = false
+	move_count = 0
+	victory_banner = false
+	victory_moves = 0
+	buyback = {}
+	shop_index = 0
 	mode = Mode.PLAY
 	messages = []
 	map_state = {}
@@ -254,12 +262,10 @@ func _process(delta: float) -> void:
 	if banner_timer > 0.0:
 		banner_timer -= delta
 		hud.queue_redraw()
-	if game_over or mode != Mode.PLAY:
+	if game_over or victory_banner or mode != Mode.PLAY:
 		held_dir = Vector2i.ZERO
 		return
 	var dir := _polled_dir()
-	if dir == Vector2i.ZERO and touch_active:
-		dir = _touch_dir()
 	if dir == Vector2i.ZERO:
 		held_dir = Vector2i.ZERO
 		return
@@ -298,25 +304,6 @@ func _polled_dir() -> Vector2i:
 		dx = 1
 		dy = 1
 	return Vector2i(dx, dy)
-
-# While a finger (or held mouse button) is down, walk toward it, 8-way.
-func _touch_dir() -> Vector2i:
-	var vsize := get_viewport_rect().size
-	var topleft := camera.get_screen_center_position() - vsize * 0.5
-	var player_screen := Vector2(player_pos) * TILE + Vector2(TILE, TILE) * 0.5 - topleft
-	var v := touch_pos - player_screen
-	if v.length() < 24.0:
-		return Vector2i.ZERO
-	match wrapi(int(round(v.angle() / (PI / 4.0))), 0, 8):
-		0: return Vector2i(1, 0)
-		1: return Vector2i(1, 1)
-		2: return Vector2i(0, 1)
-		3: return Vector2i(-1, 1)
-		4: return Vector2i(-1, 0)
-		5: return Vector2i(-1, -1)
-		6: return Vector2i(0, -1)
-		7: return Vector2i(1, -1)
-	return Vector2i.ZERO
 
 
 # ---------------------------------------------------------
@@ -546,38 +533,11 @@ func _spawn_mobs(g: Array, rng: RandomNumberGenerator, counts: Dictionary, w: in
 #  Input
 # ---------------------------------------------------------
 func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventScreenTouch:
-		if mode == Mode.OPTIONS:
-			if event.pressed:
-				_options_click(event.position, true)
-			else:
-				opt_slider_dragging = false
-			return
-		if event.pressed:
-			if game_over:
-				_start()
-				return
-			touch_active = true
-			touch_pos = event.position
-		else:
-			touch_active = false
-		return
-	if event is InputEventScreenDrag:
-		if mode == Mode.OPTIONS:
-			if opt_slider_dragging:
-				_options_click(event.position, false)
-			return
-		touch_pos = event.position
-		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
-		if mode == Mode.INVENTORY:
-			if event.pressed:
-				_char_sheet_click(event.position)
-		elif mode == Mode.OPTIONS:
-			if event.pressed:
-				_options_click(event.position, true)
-			else:
-				opt_slider_dragging = false
+		if event.pressed:
+			_handle_click(event.position)
+		else:
+			opt_slider_dragging = false
 		return
 	if event is InputEventMouseMotion and mode == Mode.OPTIONS and opt_slider_dragging:
 		_options_click(event.position, false)
@@ -596,6 +556,12 @@ func _unhandled_input(event: InputEvent) -> void:
 			_start()
 		return
 
+	if victory_banner:
+		if event.keycode == KEY_ENTER or event.keycode == KEY_KP_ENTER or event.keycode == KEY_ESCAPE:
+			victory_banner = false
+			_refresh()
+		return
+
 	match mode:
 		Mode.PLAY:
 			_play_input(event.keycode)
@@ -607,6 +573,70 @@ func _unhandled_input(event: InputEvent) -> void:
 			_close_panel()
 		Mode.OPTIONS:
 			_options_input(event.keycode)
+
+# All left-clicks funnel through here. Movement is deliberately NOT
+# mouse-driven: clicks only operate the UI (HUD buttons and panels).
+func _handle_click(mp: Vector2) -> void:
+	if game_over:
+		_start()
+		return
+	if victory_banner:
+		victory_banner = false
+		_refresh()
+		return
+	if _bar_click(mp):
+		return
+	match mode:
+		Mode.INVENTORY:
+			_char_sheet_click(mp)
+		Mode.SHOP:
+			_shop_click(mp)
+		Mode.JOURNAL:
+			_close_panel()
+		Mode.OPTIONS:
+			_options_click(mp, true)
+
+# The three HUD buttons. Geometry is shared with hud.gd via
+# bar_button_rects(), so drawing and hit-testing can never drift apart.
+const BAR_BUTTONS := ["Inventory (I)", "Journal (J)", "Options (O)"]
+
+func bar_button_rects() -> Array:
+	var vs := get_viewport_rect().size
+	var bw := 110.0
+	var bh := 26.0
+	var gap := 8.0
+	var x := vs.x - (bw + gap) * BAR_BUTTONS.size() - 4.0
+	var y := vs.y - BAR_H + 50.0
+	var rects := []
+	for i in BAR_BUTTONS.size():
+		rects.append(Rect2(x + i * (bw + gap), y, bw, bh))
+	return rects
+
+func _bar_click(mp: Vector2) -> bool:
+	var rects := bar_button_rects()
+	var targets := [Mode.INVENTORY, Mode.JOURNAL, Mode.OPTIONS]
+	for i in rects.size():
+		if not (rects[i] as Rect2).has_point(mp):
+			continue
+		if mode == Mode.SHOP:
+			current_shop = -1
+		if mode == targets[i]:
+			_close_panel()
+			return true
+		match targets[i]:
+			Mode.INVENTORY:
+				mode = Mode.INVENTORY
+				ui_pane = 1
+				ui_index = 0
+			Mode.JOURNAL:
+				mode = Mode.JOURNAL
+			Mode.OPTIONS:
+				mode = Mode.OPTIONS
+				options_screen = "main"
+				opt_index = 0
+		_refresh()
+		return true
+	return false
 
 func _close_panel() -> void:
 	mode = Mode.PLAY
@@ -702,6 +732,126 @@ func _shop_input(key: int) -> void:
 		var stock: Array = VENDORS[current_shop]["stock"]
 		if idx < stock.size():
 			_buy_item(stock[idx])
+		return
+	var count := _shop_actionable_count()
+	match key:
+		KEY_UP, KEY_W:
+			shop_index = max(shop_index - 1, 0)
+			_refresh()
+		KEY_DOWN, KEY_S:
+			shop_index = min(shop_index + 1, count - 1)
+			_refresh()
+		KEY_ENTER, KEY_KP_ENTER, KEY_E:
+			var act := 0
+			for e in shop_entries():
+				if e["kind"] == "header" or e["kind"] == "note":
+					continue
+				if act == shop_index:
+					_shop_action(e)
+					return
+				act += 1
+
+
+# ---------------------------------------------------------
+#  Shop panel data: one flat list of rows (headers, notes and
+#  actionable buy/sell/buyback entries). hud.gd draws this list
+#  and the click handler below hit-tests the same rows.
+# ---------------------------------------------------------
+func shop_entries() -> Array:
+	var entries := []
+	var vd: Dictionary = VENDORS[current_shop]
+	entries.append({ "kind": "header", "text": "Buy" })
+	var stock: Array = vd["stock"]
+	for i in stock.size():
+		entries.append({ "kind": "buy", "id": stock[i], "price": ITEMS[stock[i]]["price"], "num": i + 1 })
+	entries.append({ "kind": "header", "text": "Sell (half price)" })
+	var sellable := []
+	for id in inventory_list():
+		if ITEMS[id]["price"] > 0:
+			sellable.append(id)
+	if sellable.is_empty():
+		entries.append({ "kind": "note", "text": "Nothing in your pack they will pay for." })
+	for id in sellable:
+		entries.append({ "kind": "sell", "id": id, "price": sell_price(id) })
+	entries.append({ "kind": "header", "text": "Buyback" })
+	var bb: Array = buyback.get(current_shop, [])
+	if bb.is_empty():
+		entries.append({ "kind": "note", "text": "You have not sold them anything." })
+	for i in bb.size():
+		entries.append({ "kind": "buyback", "id": bb[i]["id"], "price": bb[i]["price"], "bb_idx": i })
+	return entries
+
+func _shop_actionable_count() -> int:
+	var n := 0
+	for e in shop_entries():
+		if e["kind"] != "header" and e["kind"] != "note":
+			n += 1
+	return n
+
+func _shop_action(e: Dictionary) -> void:
+	match e["kind"]:
+		"buy":
+			_buy_item(e["id"])
+		"sell":
+			_sell_item(e["id"])
+		"buyback":
+			_buyback_item(e["bb_idx"])
+	shop_index = clamp(shop_index, 0, max(_shop_actionable_count() - 1, 0))
+	_refresh()
+
+# Geometry here must mirror _draw_panel_shop in hud.gd.
+func _shop_click(mp: Vector2) -> void:
+	var entries := shop_entries()
+	var vs := get_viewport_rect().size
+	var w := 660.0
+	var h := 96.0 + entries.size() * 20.0
+	var px := (vs.x - w) * 0.5
+	var py := (vs.y - BAR_H - h) * 0.5
+	var act := 0
+	for i in entries.size():
+		var e: Dictionary = entries[i]
+		if e["kind"] == "header" or e["kind"] == "note":
+			continue
+		if Rect2(px + 8, py + 58 + i * 20.0 - 14.0, w - 16.0, 18.0).has_point(mp):
+			shop_index = act
+			_shop_action(e)
+			return
+		act += 1
+
+func sell_price(id: String) -> int:
+	return max(1, int(ITEMS[id]["price"]) / 2)
+
+func _sell_item(id: String) -> void:
+	if inventory.get(id, 0) <= 0:
+		return
+	var sp := sell_price(id)
+	inventory[id] -= 1
+	if inventory[id] <= 0:
+		inventory.erase(id)
+	coins += sp
+	var bb: Array = buyback.get(current_shop, [])
+	bb.push_front({ "id": id, "price": sp })
+	if bb.size() > 8:
+		bb.pop_back()
+	buyback[current_shop] = bb
+	_log("You sell the %s for %d coins." % [ITEMS[id]["name"], sp])
+
+func _buyback_item(idx: int) -> void:
+	var bb: Array = buyback.get(current_shop, [])
+	if idx < 0 or idx >= bb.size():
+		return
+	var e: Dictionary = bb[idx]
+	var id: String = e["id"]
+	if coins < e["price"]:
+		_log("Not enough coins. (%s costs %d)" % [ITEMS[id]["name"], e["price"]])
+		return
+	if not inventory.has(id) and inventory.size() >= inv_capacity():
+		_log("Your pack is full.")
+		return
+	coins -= e["price"]
+	inventory[id] = inventory.get(id, 0) + 1
+	bb.remove_at(idx)
+	_log("You buy back the %s for %d coins." % [ITEMS[id]["name"], e["price"]])
 
 
 # ---------------------------------------------------------
@@ -781,6 +931,7 @@ func _check_transition() -> bool:
 	return false
 
 func _end_turn() -> void:
+	move_count += 1
 	_mob_turn()
 	_update_music()
 	_refresh()
@@ -807,6 +958,7 @@ func _talk_to_vendor(index: int) -> void:
 		_log(data["greet"])
 
 	current_shop = set_idx % VENDORS.size()
+	shop_index = 0
 	mode = Mode.SHOP
 	_refresh()
 
@@ -841,6 +993,15 @@ func _complete_quest(q: Dictionary) -> void:
 	q["state"] = "done"
 	_log("Quest complete: %s! Reward: %s." % [q["desc"], ", ".join(reward_bits)])
 	_gain_xp(q["reward_xp"])
+	_check_victory()
+
+func _check_victory() -> void:
+	for q in quests:
+		if q["state"] != "done":
+			return
+	victory_banner = true
+	victory_moves = move_count
+	_log("Victory! All quests complete in %d moves." % victory_moves)
 
 func _count_kill(type: String) -> void:
 	for q in quests:
@@ -1358,11 +1519,49 @@ func _draw_ground_item(it: Dictionary) -> void:
 	draw_colored_polygon(pts, Color(1.0, 0.82, 0.20))
 	draw_circle(mid, 3.0, Color(1.0, 0.95, 0.6))
 
+# Each vendor is unique: a gold badge holding a symbol for their
+# trade (bread loaf, anvil, alchemy flask, coin bag) with their
+# name written underneath.
 func _draw_vendor(v: Dictionary) -> void:
+	var data: Dictionary = VENDORS[v["set_idx"] % VENDORS.size()]
 	var center := Vector2(v["pos"]) * TILE + Vector2(TILE, TILE) * 0.5
 	draw_circle(center, 12.0, Color(0.85, 0.72, 0.20))
 	draw_circle(center, 12.0, Color(0.4, 0.32, 0.05), false, 2.0)
-	_draw_glyph(center, "V", Color(0.15, 0.12, 0.02))
+	match data["symbol"]:
+		"bread":
+			draw_rect(Rect2(center + Vector2(-6, -3), Vector2(12, 7)), Color(0.55, 0.34, 0.13))
+			draw_rect(Rect2(center + Vector2(-6, -3), Vector2(12, 3)), Color(0.80, 0.58, 0.28))
+			for i in 3:
+				draw_line(center + Vector2(-4 + i * 4, -2.5), center + Vector2(-2.5 + i * 4, -0.5),
+						Color(0.45, 0.27, 0.10), 1.0)
+		"anvil":
+			draw_rect(Rect2(center + Vector2(-7, -5), Vector2(14, 4)), Color(0.22, 0.22, 0.26))
+			draw_rect(Rect2(center + Vector2(-2.5, -1), Vector2(5, 4)), Color(0.30, 0.30, 0.34))
+			draw_rect(Rect2(center + Vector2(-5, 3), Vector2(10, 3)), Color(0.22, 0.22, 0.26))
+		"flask":
+			draw_colored_polygon(PackedVector2Array([
+				center + Vector2(-1.8, -6), center + Vector2(1.8, -6),
+				center + Vector2(1.8, -1), center + Vector2(5.5, 6),
+				center + Vector2(-5.5, 6), center + Vector2(-1.8, -1)]),
+				Color(0.75, 0.85, 0.92, 0.85))
+			draw_colored_polygon(PackedVector2Array([
+				center + Vector2(2.9, 1), center + Vector2(5.5, 6),
+				center + Vector2(-5.5, 6), center + Vector2(-2.9, 1)]),
+				Color(0.25, 0.68, 0.30))
+			draw_rect(Rect2(center + Vector2(-2.4, -7.5), Vector2(4.8, 1.8)), Color(0.50, 0.36, 0.18))
+		"bag":
+			draw_circle(center + Vector2(0, 1.5), 5.5, Color(0.48, 0.32, 0.14))
+			draw_rect(Rect2(center + Vector2(-2.5, -6), Vector2(5, 3)), Color(0.36, 0.24, 0.10))
+			draw_circle(center + Vector2(0, 2), 2.2, Color(0.95, 0.82, 0.30))
+		_:
+			_draw_glyph(center, "V", Color(0.15, 0.12, 0.02))
+	# name plate under the symbol
+	var label: String = data["short"]
+	var lw: float = font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x
+	draw_string(font, center + Vector2(-lw * 0.5 + 1, 24), label,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0, 0, 0, 0.75))
+	draw_string(font, center + Vector2(-lw * 0.5, 23), label,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.95, 0.92, 0.78))
 
 func _draw_mob(mob: Dictionary) -> void:
 	var t: Dictionary = MOB_TYPES[mob["type"]]

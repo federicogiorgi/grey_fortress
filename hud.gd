@@ -23,6 +23,8 @@ func _draw() -> void:
 			_draw_panel_options()
 	if game.banner_timer > 0.0:
 		_draw_banner()
+	if game.victory_banner:
+		_draw_victory()
 	if game.game_over:
 		_draw_game_over()
 
@@ -65,8 +67,18 @@ func _draw_bar() -> void:
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.78, 0.78, 0.80))
 		line += 1
 
-	draw_string(font, Vector2(vs.x - 260, y + 76), "I character   J journal   O options",
-			HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.5, 0.5, 0.58))
+	# Clickable panel buttons (movement itself stays keyboard-only).
+	var rects: Array = game.bar_button_rects()
+	var target_modes := [game.Mode.INVENTORY, game.Mode.JOURNAL, game.Mode.OPTIONS]
+	for i in rects.size():
+		var r: Rect2 = rects[i]
+		var active: bool = game.mode == target_modes[i]
+		draw_rect(r, Color(0.22, 0.26, 0.36) if active else Color(0.14, 0.14, 0.18))
+		draw_rect(r, Color(0.55, 0.55, 0.62) if active else Color(0.38, 0.38, 0.44), false, 1.0)
+		var label: String = game.BAR_BUTTONS[i]
+		var tw: float = font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x
+		draw_string(font, Vector2(r.position.x + (r.size.x - tw) * 0.5, r.position.y + 17.5),
+				label, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.82, 0.82, 0.86))
 
 # One resource meter: dark trough, colored fill, thin border, value inside.
 func _meter(pos: Vector2, w: float, frac: float, col: Color, label: String) -> void:
@@ -187,27 +199,71 @@ func _draw_panel_journal() -> void:
 				col = Color(0.45, 0.6, 0.45)
 		draw_string(font, Vector2(p.x + 16, p.y + 58 + i * 26), text,
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 14, col)
-	draw_string(font, Vector2(p.x + 16, p.y + h - 16), "Press any key to close.",
+	draw_string(font, Vector2(p.x + 16, p.y + h - 16), "Press any key or click to close.",
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.5, 0.5, 0.58))
 
 
-# ---------------- vendor shop ----------------
+# ---------------- vendor shop (buy / sell / buyback) ----------------
+# Row geometry must mirror _shop_click in main.gd.
 func _draw_panel_shop() -> void:
 	var vd: Dictionary = game.VENDORS[game.current_shop]
-	var stock: Array = vd["stock"]
-	var h: float = 100.0 + stock.size() * 22.0
-	var p := _panel(620.0, h, "%s     (your coins: %d)" % [vd["name"], game.coins])
-	for i in stock.size():
-		var id: String = stock[i]
-		var item: Dictionary = game.ITEMS[id]
-		var tag := ""
-		if item.has("slot"):
-			tag = " [" + game.SLOT_NAMES[item["slot"]] + "]"
-		var text := "%d. %s - %d coins   (%s)%s" % [i + 1, item["name"], item["price"], item["desc"], tag]
-		draw_string(font, Vector2(p.x + 16, p.y + 58 + i * 22), text,
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.85, 0.85, 0.88))
-	draw_string(font, Vector2(p.x + 16, p.y + h - 16), "Press a number to buy. Esc to close.",
+	var entries: Array = game.shop_entries()
+	var w := 660.0
+	var h: float = 96.0 + entries.size() * 20.0
+	var p := _panel(w, h, "%s     (your coins: %d)" % [vd["name"], game.coins])
+	var act := 0
+	for i in entries.size():
+		var e: Dictionary = entries[i]
+		var yy: float = p.y + 58 + i * 20.0
+		match e["kind"]:
+			"header":
+				draw_string(font, Vector2(p.x + 16, yy), e["text"],
+						HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.85, 0.72, 0.35))
+			"note":
+				draw_string(font, Vector2(p.x + 30, yy), e["text"],
+						HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.5, 0.5, 0.58))
+			_:
+				if act == game.shop_index:
+					draw_rect(Rect2(p.x + 8, yy - 14, w - 16.0, 18), Color(0.22, 0.26, 0.36))
+				var item: Dictionary = game.ITEMS[e["id"]]
+				var tag := ""
+				if item.has("slot"):
+					tag = " [" + game.SLOT_NAMES[item["slot"]] + "]"
+				var text := ""
+				match e["kind"]:
+					"buy":
+						text = "%d. %s - %d coins   (%s)%s" % [e["num"], item["name"], e["price"], item["desc"], tag]
+					"sell":
+						text = "%s x%d - sells for %d coins   (%s)%s" % [item["name"],
+								game.inventory.get(e["id"], 0), e["price"], item["desc"], tag]
+					"buyback":
+						text = "%s - %d coins   (%s)%s" % [item["name"], e["price"], item["desc"], tag]
+				draw_string(font, Vector2(p.x + 30, yy), text,
+						HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.85, 0.85, 0.88))
+				act += 1
+	draw_string(font, Vector2(p.x + 16, p.y + h - 16),
+			"Up/Down + Enter or click a row. Numbers quick-buy. Esc closes.",
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.5, 0.5, 0.58))
+
+
+# ---------------- victory ----------------
+func _draw_victory() -> void:
+	var vs := get_viewport_rect().size
+	draw_rect(Rect2(0, 0, vs.x, vs.y), Color(0.04, 0.04, 0.02, 0.55))
+	var text := "Victory!"
+	var w: float = font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 40).x
+	draw_string(font, Vector2((vs.x - w) * 0.5 + 2, vs.y * 0.40 + 2), text,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 40, Color(0, 0, 0, 0.6))
+	draw_string(font, Vector2((vs.x - w) * 0.5, vs.y * 0.40), text,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 40, Color(0.98, 0.85, 0.35))
+	var sub := "All quests complete in %d moves" % game.victory_moves
+	var w2: float = font.get_string_size(sub, HORIZONTAL_ALIGNMENT_LEFT, -1, 18).x
+	draw_string(font, Vector2((vs.x - w2) * 0.5, vs.y * 0.40 + 36), sub,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color(0.92, 0.90, 0.80))
+	var hint := "Press Enter (or click) to keep exploring"
+	var w3: float = font.get_string_size(hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x
+	draw_string(font, Vector2((vs.x - w3) * 0.5, vs.y * 0.40 + 64), hint,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.7, 0.7, 0.72))
 
 
 # ---------------- game over ----------------
