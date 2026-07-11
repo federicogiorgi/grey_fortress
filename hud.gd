@@ -113,7 +113,7 @@ func _draw_panel_character() -> void:
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.7, 0.85, 0.7))
 
 	for i in game.SLOT_NAMES.size():
-		var yy := top + i * row_h
+		var yy : int = top + i * row_h
 		var selected: bool = game.mode == game.Mode.INVENTORY and game.ui_pane == 0 and game.ui_index == i
 		if selected:
 			draw_rect(Rect2(eq_x - 6, yy - 15, 320, row_h - 2), Color(0.22, 0.26, 0.36))

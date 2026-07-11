@@ -102,7 +102,7 @@ const SLOT_NAMES := [
 	"Trinket 2", "Back", "Main Hand", "Off Hand", "Ranged", "Tabard", "Bag",
 ]
 const BASE_INV_SLOTS := 20
-}
+
 
 const VENDORS := [
 	{
