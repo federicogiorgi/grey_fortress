@@ -11,7 +11,10 @@ var game: Node2D
 func _draw() -> void:
 	if game == null or game.grid.is_empty():
 		return
+	if game.raining:
+		_draw_rain()
 	_draw_bar()
+	_draw_minimap()
 	match game.mode:
 		game.Mode.INVENTORY:
 			_draw_panel_character()
@@ -27,6 +30,27 @@ func _draw() -> void:
 		_draw_victory()
 	if game.game_over:
 		_draw_game_over()
+	if game.flash_alpha > 0.0:
+		var vs := get_viewport_rect().size
+		draw_rect(Rect2(0, 0, vs.x, vs.y), Color(1.0, 1.0, 0.94, game.flash_alpha * 0.35))
+
+
+# ---------------- rain overlay ----------------
+# Streaks fall over the world area; positions derive from hashed
+# per-streak constants plus time, so no state is stored anywhere.
+func _draw_rain() -> void:
+	var vs := get_viewport_rect().size
+	var t := Time.get_ticks_msec() / 1000.0
+	var world_h := vs.y - BAR_H
+	draw_rect(Rect2(0, 0, vs.x, world_h), Color(0.08, 0.10, 0.18, 0.16))
+	var col := Color(0.62, 0.72, 0.92, 0.32)
+	for i in 110:
+		var sx: float = fposmod(sin(i * 127.1 + 311.7) * 43758.55, 1.0)
+		var sy: float = fposmod(sin(i * 269.5 + 183.3) * 28001.83, 1.0)
+		var speed: float = 540.0 + 380.0 * sx
+		var x: float = fposmod(sx * vs.x + t * 30.0, vs.x)
+		var y: float = fposmod(sy * world_h + t * speed, world_h)
+		draw_line(Vector2(x, y), Vector2(x - 2.5, y + 11.0), col, 1.0)
 
 
 # ---------------- "Entering..." area banner ----------------
@@ -55,9 +79,10 @@ func _draw_bar() -> void:
 			Color(0.16, 0.32, 0.78), "%d/%d" % [game.player_mana, game.player_max_mana])
 	_meter(Vector2(10, y + 45), 190.0, float(game.player_xp) / game.xp_needed(),
 			Color(0.20, 0.55, 0.22), "%d/%d" % [game.player_xp, game.xp_needed()])
+	# The area name lives on the minimap now, so this line stays short
+	# and can no longer collide with the message log.
 	draw_string(font, Vector2(10, y + 76),
-			"Lv %d   Dmg %d   Coins %d   -   %s" % [game.player_level, game.player_dmg,
-			game.coins, game.MAP_DEFS[game.current_map]["name"]],
+			"Lv %d   Dmg %d   Coins %d" % [game.player_level, game.player_dmg, game.coins],
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.72, 0.70, 0.60))
 
 	var start: int = max(0, game.messages.size() - 4)
@@ -89,6 +114,61 @@ func _meter(pos: Vector2, w: float, frac: float, col: Color, label: String) -> v
 	var tw: float = font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x
 	draw_string(font, pos + Vector2((w - tw) * 0.5, 11.5), label,
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1, 1, 1, 0.88))
+
+
+# ---------------- world minimap ----------------
+# The four maps stacked north-to-south in the bottom-right corner,
+# with the player's dot in the current one and the area name below.
+const MINI_SCALE := 0.55
+const MINI_COLORS := {
+	"town":   Color(0.36, 0.42, 0.30),
+	"wilds":  Color(0.25, 0.37, 0.22),
+	"forest": Color(0.14, 0.29, 0.15),
+	"ruins":  Color(0.33, 0.34, 0.39),
+}
+
+func _draw_minimap() -> void:
+	var vs := get_viewport_rect().size
+	var pad := 7.0
+	var gap := 3.0
+	var label: String = game.MAP_DEFS[game.current_map]["name"]
+	var label_w: float = font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x
+	var maps_w := 0.0
+	var maps_h := 0.0
+	for id in game.WORLD_ORDER:
+		var def: Dictionary = game.MAP_DEFS[id]
+		maps_w = max(maps_w, def["w"] * MINI_SCALE)
+		maps_h += def["h"] * MINI_SCALE
+	maps_h += gap * (game.WORLD_ORDER.size() - 1)
+	var w: float = max(maps_w, label_w) + pad * 2
+	var h: float = maps_h + pad * 2 + 17.0
+	var px := vs.x - w - 10.0
+	var py := vs.y - BAR_H - h - 10.0
+
+	draw_rect(Rect2(px, py, w, h), Color(0.06, 0.06, 0.09, 0.80))
+	draw_rect(Rect2(px, py, w, h), Color(0.35, 0.35, 0.42), false, 1.0)
+
+	var yy := py + pad
+	for id in game.WORLD_ORDER:
+		var def: Dictionary = game.MAP_DEFS[id]
+		var mw: float = def["w"] * MINI_SCALE
+		var mh: float = def["h"] * MINI_SCALE
+		var mx: float = px + (w - mw) * 0.5
+		var col: Color = MINI_COLORS[id] if game.visited.has(id) else Color(0.11, 0.11, 0.14)
+		draw_rect(Rect2(mx, yy, mw, mh), col)
+		if id == game.current_map:
+			draw_rect(Rect2(mx, yy, mw, mh), Color(0.85, 0.72, 0.20), false, 1.0)
+			var dot := Vector2(
+					mx + (game.player_pos.x + 0.5) / float(def["w"]) * mw,
+					yy + (game.player_pos.y + 0.5) / float(def["h"]) * mh)
+			draw_circle(dot, 2.2, Color(1.0, 0.95, 0.75))
+			draw_circle(dot, 2.2, Color(0.3, 0.2, 0.0), false, 0.8)
+		else:
+			draw_rect(Rect2(mx, yy, mw, mh), Color(0.25, 0.25, 0.30), false, 1.0)
+		yy += mh + gap
+
+	draw_string(font, Vector2(px + (w - label_w) * 0.5, py + h - 6.0), label,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.92, 0.88, 0.75))
 
 
 # ---------------- shared panel frame ----------------

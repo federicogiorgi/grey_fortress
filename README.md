@@ -33,11 +33,13 @@ Movement is keyboard-only; the mouse operates the UI.
 1. Grey Fortress Town: 4 vendor houses, healing temple, north gate
 2. Northern Wilds: rats, goblins, wild boars
 3. Dark Forest: wolves join in, denser trees
-4. Ancient Ruins: skeletons and trolls; the Sunstone Relic lies
-   between two trees near the north end
+4. Ancient Ruins: swarming with skeletons, plus goblins and trolls;
+   the Sunstone Relic lies between two trees near the north end
 
 A winding road connects the south and north gates of every map,
 so you can never be walled in by the procedural generation.
+Every mob is drawn with its own face icon (rat whiskers, goblin
+ears, boar tusks, wolf muzzle, skull, troll underbite).
 
 ## Systems
 
@@ -54,6 +56,13 @@ so you can never be walled in by the procedural generation.
   quick-buy), sell your items at half price, and buy back anything
   you sold at the same price (each vendor remembers the last 8 items
   you sold them); navigate with Up/Down + Enter or click a row
+- Two item tiers per vendor: every item type has a pricier, stronger
+  variant (e.g. Iron Sword +1 dmg for 25c, Steel Sword +2 dmg for
+  60c); the unique loot hidden in the world outposts (Scout's Boots,
+  Hunter's Bow, Ancient Legplates) outclasses everything in shops
+- Weather: entering an area has a 10% chance of rain — a cozy
+  synthesized rain loop with animated streaks, plus occasional
+  distant lightning (thunder rumble and a brief screen flash)
 - Quests: each vendor gives one on first talk; return when done
   (kill 5 rats, kill 3 goblins, bring 10 coins, fetch the relic)
 - Victory: finishing all four quests shows a "Victory!" screen with
@@ -63,6 +72,9 @@ so you can never be walled in by the procedural generation.
 - "Entering..." banner the first time you reach each area
 - HP (red), Mana (blue), XP (green) bars in the HUD, plus clickable
   Inventory / Journal / Options buttons
+- World minimap (bottom-right): the four maps stacked north-to-south,
+  visited areas colored, a dot for your position in the current map,
+  and the area name underneath
 - Options menu (O or Esc): master volume, keybinds, fullscreen;
   menu items and the sound slider also respond to mouse click/drag;
   settings persist to user://settings.cfg
@@ -85,6 +97,9 @@ eerie ruins theme, combat), composed
 for this project and synthesized by tools/make_music.py. Public domain (CC0).
 Combat music triggers when any enemy has you inside its sight range and
 relaxes a few turns after you break contact.
+
+The weather ambience (seamless rain loop, distant thunder) is likewise
+synthesized from scratch by tools/make_ambience.py. Public domain (CC0).
 
 ## Next steps
 

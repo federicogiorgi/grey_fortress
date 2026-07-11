@@ -1,17 +1,20 @@
 extends Node2D
 # =============================================================
-#  GREY FORTRESS - v4
+#  GREY FORTRESS - v5
 #
 #  New in this version:
-#   - Vendors are unique: each has a purpose symbol (bread, anvil,
-#     flask, coin bag) with their name drawn underneath
-#   - Shops buy AND sell: sell items at half price, buy them back
-#     at the same price (per-vendor buyback list)
-#   - Victory screen when all four quests are done, showing the
-#     number of moves the run took
-#   - Desktop (Steam) only: Android/touch support removed
-#   - HUD buttons (Inventory / Journal / Options) are clickable;
-#     movement stays keyboard-only
+#   - World minimap in the bottom-right corner: the four maps
+#     stacked north-to-south, player dot, current area name
+#   - Mobs have drawn face icons instead of letter glyphs;
+#     more skeletons haunt the Ancient Ruins
+#   - Weather: 10% chance of rain on entering an area (looping
+#     rain ambience, animated streaks, occasional lightning
+#     with a thunder rumble and a brief screen flash)
+#   - Second, stronger item tier at every vendor; world loot
+#     (outposts) is now clearly the most powerful gear
+#
+#  v4: unique vendor symbols, shop sell/buyback, victory screen,
+#  clickable HUD buttons, Android support removed (Steam only)
 # =============================================================
 
 enum Mode { PLAY, INVENTORY, JOURNAL, SHOP, OPTIONS }
@@ -46,53 +49,78 @@ const MAP_DEFS := {
 		"name": "Ancient Ruins", "south": "forest", "music": "ruins",
 		"w": 125, "h": 94,
 		"tree_density": 0.030, "water_blobs": 1, "ruin_walls": true,
-		"mobs": { "s": 8, "g": 6, "t": 4 },
+		"mobs": { "s": 14, "g": 6, "t": 4 },
 		"outpost": { "x": 28, "y": 58, "item": "legplates" },
 	},
 }
 
+# The world from north to south, for the HUD minimap.
+const WORLD_ORDER := ["ruins", "forest", "wilds", "town"]
+const RAIN_CHANCE := 0.10
+
 const MOB_TYPES := {
 	"r": { "name": "rat",       "hp": 2,  "dmg": 1, "sight": 10, "xp": 3,
-			"coins": [1, 2],   "color": Color(0.50, 0.42, 0.32), "glyph": "r" },
+			"coins": [1, 2],   "color": Color(0.50, 0.42, 0.32) },
 	"g": { "name": "goblin",    "hp": 3,  "dmg": 1, "sight": 8,  "xp": 5,
-			"coins": [2, 4],   "color": Color(0.70, 0.20, 0.18), "glyph": "g" },
+			"coins": [2, 4],   "color": Color(0.70, 0.20, 0.18) },
 	"b": { "name": "wild boar", "hp": 5,  "dmg": 2, "sight": 5,  "xp": 8,
-			"coins": [3, 6],   "color": Color(0.38, 0.24, 0.14), "glyph": "b" },
+			"coins": [3, 6],   "color": Color(0.38, 0.24, 0.14) },
 	"w": { "name": "wolf",      "hp": 4,  "dmg": 2, "sight": 10, "xp": 10,
-			"coins": [4, 7],   "color": Color(0.42, 0.44, 0.50), "glyph": "w" },
+			"coins": [4, 7],   "color": Color(0.42, 0.44, 0.50) },
 	"s": { "name": "skeleton",  "hp": 6,  "dmg": 2, "sight": 9,  "xp": 14,
-			"coins": [5, 9],   "color": Color(0.80, 0.80, 0.72), "glyph": "s" },
+			"coins": [5, 9],   "color": Color(0.80, 0.80, 0.72) },
 	"t": { "name": "troll",     "hp": 10, "dmg": 3, "sight": 6,  "xp": 25,
-			"coins": [10, 18], "color": Color(0.25, 0.40, 0.22), "glyph": "t" },
+			"coins": [10, 18], "color": Color(0.25, 0.40, 0.22) },
 }
 
+# Vendor stock comes in two tiers per item type: the second tier is
+# pricier but stronger. World loot (price 0, found in outposts and
+# ruins) beats anything a vendor sells.
 const ITEMS := {
 	"bread":  { "name": "Fresh Bread",      "price": 4,  "heal": 4,
 			"desc": "Restores 4 HP" },
+	"stew":   { "name": "Hearty Stew",      "price": 10, "heal": 10,
+			"desc": "Restores 10 HP" },
 	"potion": { "name": "Healing Potion",   "price": 10, "heal": 8,
 			"desc": "Restores 8 HP" },
+	"gpotion": { "name": "Greater Potion",  "price": 25, "heal": 18,
+			"desc": "Restores 18 HP" },
 	"sword":  { "name": "Iron Sword",       "price": 25, "slot": 16, "dmg": 1,
 			"desc": "+1 damage" },
+	"ssword": { "name": "Steel Sword",      "price": 60, "slot": 16, "dmg": 2,
+			"desc": "+2 damage" },
 	"shield": { "name": "Wooden Shield",    "price": 15, "slot": 17, "hp": 3,
 			"desc": "+3 max HP" },
+	"tshield": { "name": "Tower Shield",    "price": 40, "slot": 17, "hp": 6,
+			"desc": "+6 max HP" },
 	"cap":    { "name": "Leather Cap",      "price": 10, "slot": 1,  "hp": 2,
 			"desc": "+2 max HP" },
+	"helm":   { "name": "Iron Helm",        "price": 28, "slot": 1,  "hp": 4,
+			"desc": "+4 max HP" },
 	"charm":  { "name": "Lucky Charm",      "price": 20, "slot": 13, "hp": 4,
 			"desc": "+4 max HP" },
+	"talisman": { "name": "Moon Talisman",  "price": 50, "slot": 13, "hp": 8,
+			"desc": "+8 max HP" },
 	"cloak":  { "name": "Traveler's Cloak", "price": 12, "slot": 15, "hp": 2,
 			"desc": "+2 max HP" },
+	"fcloak": { "name": "Fur-lined Cloak",  "price": 32, "slot": 15, "hp": 4,
+			"desc": "+4 max HP" },
 	"ring":   { "name": "Copper Ring",      "price": 8,  "slot": 11, "hp": 1,
 			"desc": "+1 max HP" },
+	"sring":  { "name": "Silver Ring",      "price": 22, "slot": 11, "hp": 2,
+			"desc": "+2 max HP" },
 	"bag":    { "name": "Small Bag",        "price": 18, "slot": 20, "bag_slots": 8,
 			"desc": "+8 inventory slots" },
+	"lbag":   { "name": "Traveler's Pack",  "price": 45, "slot": 20, "bag_slots": 14,
+			"desc": "+14 inventory slots" },
 	"relic":  { "name": "Sunstone Relic",   "price": 0,
 			"desc": "Quest item, warm to the touch" },
-	"boots":  { "name": "Scout's Boots",     "price": 0, "slot": 8,  "hp": 2,
-			"desc": "+2 max HP" },
-	"bow":    { "name": "Hunter's Bow",      "price": 0, "slot": 18, "dmg": 1,
-			"desc": "+1 damage" },
-	"legplates": { "name": "Ancient Legplates", "price": 0, "slot": 7, "hp": 3,
-			"desc": "+3 max HP" },
+	"boots":  { "name": "Scout's Boots",     "price": 0, "slot": 8,  "hp": 6,
+			"desc": "+6 max HP" },
+	"bow":    { "name": "Hunter's Bow",      "price": 0, "slot": 18, "dmg": 3,
+			"desc": "+3 damage" },
+	"legplates": { "name": "Ancient Legplates", "price": 0, "slot": 7, "hp": 9,
+			"desc": "+9 max HP" },
 }
 
 # World-of-Warcraft-style equipment slots, in canonical order.
@@ -106,28 +134,31 @@ const BASE_INV_SLOTS := 20
 
 const VENDORS := [
 	{
-		"name": "Alda the baker", "short": "Alda", "symbol": "bread", "stock": ["bread"],
+		"name": "Alda the baker", "short": "Alda", "symbol": "bread", "stock": ["bread", "stew"],
 		"greet": "Alda: Fresh bread! Well, fresh-ish.",
 		"quest": { "desc": "Kill 5 rats", "type": "kill", "target": "r", "need": 5,
 				"intro": "Rats got into my flour again. Thin their numbers, would you?",
 				"reward_coins": 20, "reward_xp": 15 },
 	},
 	{
-		"name": "Borin the smith", "short": "Borin", "symbol": "anvil", "stock": ["sword", "shield", "cap"],
+		"name": "Borin the smith", "short": "Borin", "symbol": "anvil",
+		"stock": ["sword", "ssword", "shield", "tshield", "cap", "helm"],
 		"greet": "Borin: Steel solves most problems.",
 		"quest": { "desc": "Kill 3 goblins", "type": "kill", "target": "g", "need": 3,
 				"intro": "Goblins stole a crate of nails. Make them regret it.",
 				"reward_coins": 25, "reward_xp": 15 },
 	},
 	{
-		"name": "Cyra the alchemist", "short": "Cyra", "symbol": "flask", "stock": ["potion", "charm"],
+		"name": "Cyra the alchemist", "short": "Cyra", "symbol": "flask",
+		"stock": ["potion", "gpotion", "charm", "talisman"],
 		"greet": "Cyra: Potions brewing. Do not rush art.",
 		"quest": { "desc": "Bring me 10 coins", "type": "coins", "need": 10,
 				"intro": "Reagents are expensive. Fund my research with 10 coins?",
 				"reward_items": { "potion": 2 }, "reward_xp": 20 },
 	},
 	{
-		"name": "Dolm the trader", "short": "Dolm", "symbol": "bag", "stock": ["cloak", "ring", "bag"],
+		"name": "Dolm the trader", "short": "Dolm", "symbol": "bag",
+		"stock": ["cloak", "fcloak", "ring", "sring", "bag", "lbag"],
 		"greet": "Dolm: Rare goods for discerning customers.",
 		"quest": { "desc": "Recover the Sunstone Relic from the Ancient Ruins",
 				"type": "item", "target": "relic", "need": 1,
@@ -193,6 +224,13 @@ var music: AudioStreamPlayer
 var music_track := ""
 var combat_heat := 0   # turns of combat music left after last enemy sighting
 
+# ---- weather ----
+var raining := false
+var lightning_timer := 0.0
+var flash_alpha := 0.0     # white screen flash, fades out after a strike
+var rain_player: AudioStreamPlayer
+var thunder_player: AudioStreamPlayer
+
 @onready var camera: Camera2D = $Camera
 @onready var hud: Node2D = $UI/HUD
 @onready var font: Font = ThemeDB.fallback_font
@@ -209,6 +247,16 @@ func _ready() -> void:
 	music = AudioStreamPlayer.new()
 	music.volume_db = -9.0
 	add_child(music)
+	rain_player = AudioStreamPlayer.new()
+	rain_player.volume_db = -8.0
+	var rain_stream: AudioStreamOggVorbis = load("res://audio/rain.ogg")
+	rain_stream.loop = true
+	rain_player.stream = rain_stream
+	add_child(rain_player)
+	thunder_player = AudioStreamPlayer.new()
+	thunder_player.volume_db = -4.0
+	thunder_player.stream = load("res://audio/thunder.ogg")
+	add_child(thunder_player)
 	_apply_volume()
 	_start()
 
@@ -250,6 +298,10 @@ func _start() -> void:
 
 func _refresh() -> void:
 	camera.position = Vector2(player_pos) * TILE + Vector2(TILE, TILE) * 0.5
+	# Push the new position to the viewport NOW: _draw culls tiles from
+	# get_screen_center_position(), which is stale until the camera
+	# scroll updates (visible as a grey world after a map transition).
+	camera.force_update_scroll()
 	queue_redraw()
 	hud.queue_redraw()
 
@@ -262,6 +314,7 @@ func _process(delta: float) -> void:
 	if banner_timer > 0.0:
 		banner_timer -= delta
 		hud.queue_redraw()
+	_weather_tick(delta)
 	if game_over or victory_banner or mode != Mode.PLAY:
 		held_dir = Vector2i.ZERO
 		return
@@ -336,6 +389,7 @@ func _load_map(id: String, arrive: String) -> void:
 	camera.limit_bottom = grid.size() * TILE + BAR_H / 2
 	combat_heat = 0
 	_update_music()
+	_set_rain(randf() < RAIN_CHANCE)
 	if not visited.has(id):
 		visited[id] = true
 		banner_text = "Entering... %s" % MAP_DEFS[id]["name"]
@@ -1305,6 +1359,36 @@ func _load_settings() -> void:
 
 
 # ---------------------------------------------------------
+#  Weather: each time you enter an area there is a 10% chance
+#  of rain (looping ambience + animated streaks). While it
+#  rains, distant lightning strikes now and then: a thunder
+#  rumble and a brief flash of the screen.
+# ---------------------------------------------------------
+func _set_rain(on: bool) -> void:
+	raining = on
+	flash_alpha = 0.0
+	if on:
+		lightning_timer = randf_range(4.0, 14.0)
+		if not rain_player.playing:
+			rain_player.play()
+		_log("Rain begins to fall.")
+	else:
+		rain_player.stop()
+
+func _weather_tick(delta: float) -> void:
+	if flash_alpha > 0.0:
+		flash_alpha = max(flash_alpha - delta * 2.2, 0.0)
+	if not raining:
+		return
+	hud.queue_redraw()   # animate the rain streaks and the flash
+	lightning_timer -= delta
+	if lightning_timer <= 0.0:
+		lightning_timer = randf_range(8.0, 24.0)
+		flash_alpha = 1.0
+		thunder_player.play()
+
+
+# ---------------------------------------------------------
 #  Music: town theme in town, exploration outside,
 #  combat as soon as any enemy has the player in sight.
 #  Tracks were composed for this project (tools/make_music.py)
@@ -1568,11 +1652,72 @@ func _draw_mob(mob: Dictionary) -> void:
 	var center := Vector2(mob["pos"]) * TILE + Vector2(TILE, TILE) * 0.5
 	draw_circle(center, 11.0, t["color"])
 	draw_circle(center, 11.0, Color(0, 0, 0, 0.5), false, 2.0)
-	_draw_glyph(center, t["glyph"], Color(1, 0.92, 0.85))
+	_draw_mob_icon(center, mob["type"], t["color"])
 	var maxhp: int = MOB_TYPES[mob["type"]]["hp"]
 	var frac: float = float(mob["hp"]) / float(maxhp)
 	draw_rect(Rect2(center + Vector2(-10, -17), Vector2(20, 3)), Color(0.2, 0.05, 0.05))
 	draw_rect(Rect2(center + Vector2(-10, -17), Vector2(20.0 * frac, 3)), Color(0.9, 0.25, 0.2))
+
+# A small face icon per mob type, drawn on the colored disc.
+func _draw_mob_icon(c: Vector2, type: String, base: Color) -> void:
+	var dark := Color(0.08, 0.06, 0.05)
+	match type:
+		"r":  # rat: round ears, beady eyes, pink nose, whiskers
+			draw_circle(c + Vector2(-5.5, -6.5), 3.2, base.darkened(0.25))
+			draw_circle(c + Vector2(5.5, -6.5), 3.2, base.darkened(0.25))
+			draw_circle(c + Vector2(-5.5, -6.5), 1.6, Color(0.85, 0.60, 0.60))
+			draw_circle(c + Vector2(5.5, -6.5), 1.6, Color(0.85, 0.60, 0.60))
+			draw_circle(c + Vector2(-3, -1), 1.1, dark)
+			draw_circle(c + Vector2(3, -1), 1.1, dark)
+			draw_circle(c + Vector2(0, 4), 1.6, Color(0.90, 0.55, 0.55))
+			draw_line(c + Vector2(-2, 4), c + Vector2(-8, 2.5), Color(0.9, 0.88, 0.8), 0.8)
+			draw_line(c + Vector2(-2, 5), c + Vector2(-8, 6), Color(0.9, 0.88, 0.8), 0.8)
+			draw_line(c + Vector2(2, 4), c + Vector2(8, 2.5), Color(0.9, 0.88, 0.8), 0.8)
+			draw_line(c + Vector2(2, 5), c + Vector2(8, 6), Color(0.9, 0.88, 0.8), 0.8)
+		"g":  # goblin: pointed ears, slanted yellow eyes, jagged grin
+			draw_colored_polygon(PackedVector2Array([
+				c + Vector2(-9, -2), c + Vector2(-14, -8), c + Vector2(-7, -6)]), base.darkened(0.15))
+			draw_colored_polygon(PackedVector2Array([
+				c + Vector2(9, -2), c + Vector2(14, -8), c + Vector2(7, -6)]), base.darkened(0.15))
+			draw_line(c + Vector2(-5.5, -4), c + Vector2(-1.5, -2), Color(0.95, 0.85, 0.25), 2.2)
+			draw_line(c + Vector2(5.5, -4), c + Vector2(1.5, -2), Color(0.95, 0.85, 0.25), 2.2)
+			draw_line(c + Vector2(-4.5, 4.5), c + Vector2(-1.5, 3), dark, 1.4)
+			draw_line(c + Vector2(-1.5, 3), c + Vector2(1.5, 4.5), dark, 1.4)
+			draw_line(c + Vector2(1.5, 4.5), c + Vector2(4.5, 3), dark, 1.4)
+		"b":  # boar: broad snout with nostrils, upward tusks
+			draw_circle(c + Vector2(-4, -3.5), 1.3, dark)
+			draw_circle(c + Vector2(4, -3.5), 1.3, dark)
+			draw_rect(Rect2(c + Vector2(-4.5, 0.5), Vector2(9, 6)), base.darkened(0.3))
+			draw_circle(c + Vector2(-2, 3.5), 1.1, dark)
+			draw_circle(c + Vector2(2, 3.5), 1.1, dark)
+			draw_line(c + Vector2(-5.5, 4), c + Vector2(-8, -0.5), Color(0.95, 0.92, 0.82), 2.0)
+			draw_line(c + Vector2(5.5, 4), c + Vector2(8, -0.5), Color(0.95, 0.92, 0.82), 2.0)
+		"w":  # wolf: pointed ears, amber eyes, long muzzle
+			draw_colored_polygon(PackedVector2Array([
+				c + Vector2(-7, -5), c + Vector2(-8.5, -12), c + Vector2(-2.5, -7)]), base.darkened(0.2))
+			draw_colored_polygon(PackedVector2Array([
+				c + Vector2(7, -5), c + Vector2(8.5, -12), c + Vector2(2.5, -7)]), base.darkened(0.2))
+			draw_circle(c + Vector2(-3.5, -2), 1.4, Color(0.95, 0.75, 0.25))
+			draw_circle(c + Vector2(3.5, -2), 1.4, Color(0.95, 0.75, 0.25))
+			draw_colored_polygon(PackedVector2Array([
+				c + Vector2(-3, 1), c + Vector2(3, 1), c + Vector2(0, 8)]), base.darkened(0.3))
+			draw_circle(c + Vector2(0, 6.5), 1.3, dark)
+		"s":  # skeleton: skull with hollow sockets and teeth
+			draw_circle(c + Vector2(0, -2), 7.0, Color(0.94, 0.93, 0.85))
+			draw_rect(Rect2(c + Vector2(-4.5, 3), Vector2(9, 5)), Color(0.94, 0.93, 0.85))
+			draw_circle(c + Vector2(-3, -3), 2.1, dark)
+			draw_circle(c + Vector2(3, -3), 2.1, dark)
+			draw_colored_polygon(PackedVector2Array([
+				c + Vector2(-1.2, 1.5), c + Vector2(1.2, 1.5), c + Vector2(0, 3.5)]), dark)
+			for i in 3:
+				draw_line(c + Vector2(-2.4 + i * 2.4, 5), c + Vector2(-2.4 + i * 2.4, 8), dark, 0.9)
+		"t":  # troll: heavy brow, sunken eyes, underbite tusks
+			draw_rect(Rect2(c + Vector2(-7, -6), Vector2(14, 3.5)), base.darkened(0.35))
+			draw_circle(c + Vector2(-3.5, -0.5), 1.3, Color(0.95, 0.55, 0.2))
+			draw_circle(c + Vector2(3.5, -0.5), 1.3, Color(0.95, 0.55, 0.2))
+			draw_line(c + Vector2(-4.5, 5.5), c + Vector2(4.5, 5.5), base.darkened(0.4), 2.5)
+			draw_rect(Rect2(c + Vector2(-4.5, 2.8), Vector2(2, 3)), Color(0.95, 0.92, 0.82))
+			draw_rect(Rect2(c + Vector2(2.5, 2.8), Vector2(2, 3)), Color(0.95, 0.92, 0.82))
 
 func _draw_player() -> void:
 	var center := Vector2(player_pos) * TILE + Vector2(TILE, TILE) * 0.5
