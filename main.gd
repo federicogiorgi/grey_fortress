@@ -180,6 +180,7 @@ var keymap := {
 var options_screen := "main"
 var opt_index := 0
 var opt_rebinding := false
+var opt_slider_dragging := false
 var master_volume := 1.0
 var visited := {}         # maps the player has entered at least once
 var banner_text := ""
@@ -546,6 +547,12 @@ func _spawn_mobs(g: Array, rng: RandomNumberGenerator, counts: Dictionary, w: in
 # ---------------------------------------------------------
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventScreenTouch:
+		if mode == Mode.OPTIONS:
+			if event.pressed:
+				_options_click(event.position, true)
+			else:
+				opt_slider_dragging = false
+			return
 		if event.pressed:
 			if game_over:
 				_start()
@@ -556,11 +563,24 @@ func _unhandled_input(event: InputEvent) -> void:
 			touch_active = false
 		return
 	if event is InputEventScreenDrag:
+		if mode == Mode.OPTIONS:
+			if opt_slider_dragging:
+				_options_click(event.position, false)
+			return
 		touch_pos = event.position
 		return
-	if event is InputEventMouseButton:
-		if event.pressed and event.button_index == MOUSE_BUTTON_LEFT and mode == Mode.INVENTORY:
-			_char_sheet_click(event.position)
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		if mode == Mode.INVENTORY:
+			if event.pressed:
+				_char_sheet_click(event.position)
+		elif mode == Mode.OPTIONS:
+			if event.pressed:
+				_options_click(event.position, true)
+			else:
+				opt_slider_dragging = false
+		return
+	if event is InputEventMouseMotion and mode == Mode.OPTIONS and opt_slider_dragging:
+		_options_click(event.position, false)
 		return
 
 	if not (event is InputEventKey and event.pressed and not event.echo):
@@ -1023,6 +1043,75 @@ func _options_input(key: int) -> void:
 				options_screen = "main"
 				opt_index = 2
 			_refresh()
+
+# Click/tap handling for the options menu. Geometry here must mirror
+# _draw_panel_options in hud.gd. is_press is true for the initial click/tap
+# and false for a drag/motion update (used to slide the volume meter).
+func _options_click(mp: Vector2, is_press: bool) -> void:
+	var vs := get_viewport_rect().size
+	match options_screen:
+		"main":
+			if not is_press:
+				return
+			var w := 420.0
+			var h := 220.0
+			var px := (vs.x - w) * 0.5
+			var py := (vs.y - BAR_H - h) * 0.5
+			for i in OPT_MAIN.size():
+				var yy := py + 62 + i * 30
+				if Rect2(px + 8, yy - 18, 404, 26).has_point(mp):
+					opt_index = i
+					match i:
+						0: options_screen = "graphics"
+						1: options_screen = "sound"
+						2: options_screen = "keybinds"
+						3:
+							_close_panel()
+							return
+					opt_index = 0
+					_refresh()
+					return
+		"graphics":
+			if not is_press:
+				return
+			var w := 420.0
+			var h := 150.0
+			var px := (vs.x - w) * 0.5
+			var py := (vs.y - BAR_H - h) * 0.5
+			if Rect2(px + 8, py + 46, 404, 26).has_point(mp):
+				_toggle_fullscreen()
+				_save_settings()
+				_refresh()
+		"sound":
+			var w := 420.0
+			var h := 160.0
+			var px := (vs.x - w) * 0.5
+			var py := (vs.y - BAR_H - h) * 0.5
+			var slider := Rect2(px + 20, py + 76, 380.0, 15.0)
+			if is_press:
+				if not slider.grow(6.0).has_point(mp):
+					return
+				opt_slider_dragging = true
+			elif not opt_slider_dragging:
+				return
+			master_volume = clamp((mp.x - slider.position.x) / slider.size.x, 0.0, 1.0)
+			_apply_volume()
+			_save_settings()
+			_refresh()
+		"keybinds":
+			if not is_press:
+				return
+			var h := 110.0 + REBIND_ACTIONS.size() * 26.0
+			var w := 460.0
+			var px := (vs.x - w) * 0.5
+			var py := (vs.y - BAR_H - h) * 0.5
+			for i in REBIND_ACTIONS.size():
+				var yy := py + 62 + i * 26
+				if Rect2(px + 8, yy - 17, 444, 24).has_point(mp):
+					opt_index = i
+					opt_rebinding = true
+					_refresh()
+					return
 
 func _toggle_fullscreen() -> void:
 	var win := get_window()

@@ -235,7 +235,7 @@ func _draw_panel_options() -> void:
 					draw_rect(Rect2(p.x + 8, yy - 18, 404, 26), Color(0.22, 0.26, 0.36))
 				draw_string(font, Vector2(p.x + 20, yy), game.OPT_MAIN[i],
 						HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(0.88, 0.88, 0.9))
-			draw_string(font, Vector2(p.x + 16, p.y + 204), "Up/Down + Enter. Esc closes.",
+			draw_string(font, Vector2(p.x + 16, p.y + 204), "Up/Down + Enter, or click/tap. Esc closes.",
 					HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.5, 0.5, 0.58))
 		"graphics":
 			var p := _panel(420.0, 150.0, "Options - Graphics")
@@ -243,7 +243,7 @@ func _draw_panel_options() -> void:
 			draw_rect(Rect2(p.x + 8, p.y + 46, 404, 26), Color(0.22, 0.26, 0.36))
 			draw_string(font, Vector2(p.x + 20, p.y + 64), "Fullscreen: %s" % ("On" if fs else "Off"),
 					HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(0.88, 0.88, 0.9))
-			draw_string(font, Vector2(p.x + 16, p.y + 134), "Enter toggles. Esc goes back.",
+			draw_string(font, Vector2(p.x + 16, p.y + 134), "Enter or click/tap toggles. Esc goes back.",
 					HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.5, 0.5, 0.58))
 		"sound":
 			var p := _panel(420.0, 160.0, "Options - Sound")
@@ -251,7 +251,7 @@ func _draw_panel_options() -> void:
 					HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(0.88, 0.88, 0.9))
 			_meter(Vector2(p.x + 20, p.y + 76), 380.0, game.master_volume,
 					Color(0.75, 0.62, 0.20), "")
-			draw_string(font, Vector2(p.x + 16, p.y + 144), "Left/Right adjust. Esc goes back.",
+			draw_string(font, Vector2(p.x + 16, p.y + 144), "Left/Right adjust, or click/drag the bar. Esc goes back.",
 					HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.5, 0.5, 0.58))
 		"keybinds":
 			var h: float = 110.0 + game.REBIND_ACTIONS.size() * 26.0
@@ -271,5 +271,5 @@ func _draw_panel_options() -> void:
 						HORIZONTAL_ALIGNMENT_LEFT, -1, 14,
 						Color(0.95, 0.85, 0.5) if (game.opt_rebinding and game.opt_index == i) else Color(0.88, 0.88, 0.9))
 			draw_string(font, Vector2(p.x + 16, p.y + h - 16),
-					"Up/Down select, Enter rebind, Esc goes back. Arrow keys always move.",
+					"Up/Down select, Enter rebind, or click/tap a row. Esc goes back.",
 					HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.5, 0.5, 0.58))

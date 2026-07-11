@@ -52,7 +52,8 @@ so you can never be walled in by the procedural generation.
 - "Entering..." banner the first time you reach each area
 - HP (red), Mana (blue), XP (green) bars in the HUD
 - Options menu (O or Esc): master volume, keybinds, fullscreen;
-  settings persist to user://settings.cfg
+  menu items and the sound slider also respond to mouse click/drag
+  (or finger on Android); settings persist to user://settings.cfg
 - Each wilderness map hides a loot outpost: a small stone keep
   holding a unique item (boots, bow, legplates)
 
