@@ -1,0 +1,27 @@
+; Engine configuration file.
+; Grey Fortress - a tiny Castle of the Winds style prototype.
+
+config_version=5
+
+[application]
+
+config/name="Grey Fortress"
+run/main_scene="res://Main.tscn"
+config/features=PackedStringArray("4.2")
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/size/mode=2
+window/stretch/mode="canvas_items"
+window/stretch/aspect="keep"
+
+[input_devices]
+
+pointing/emulate_touch_from_mouse=true
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
