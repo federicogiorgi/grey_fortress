@@ -9,7 +9,12 @@ var game: Node2D
 
 
 func _draw() -> void:
-	if game == null or game.grid.is_empty():
+	if game == null:
+		return
+	if game.mode == game.Mode.TITLE:
+		_draw_title()
+		return
+	if game.grid.is_empty():
 		return
 	if game.raining:
 		_draw_rain()
@@ -55,6 +60,105 @@ func _draw_rain() -> void:
 		pts[i * 2] = Vector2(x, y)
 		pts[i * 2 + 1] = Vector2(x - 2.5, y + 11.0)
 	draw_multiline(pts, Color(0.62, 0.72, 0.92, 0.32), 1.0)
+
+
+# ---------------- title screen ----------------
+# A grey fortress on a hill under a crescent moon and a starry sky,
+# all drawn with canvas primitives.
+func _draw_title() -> void:
+	var vs := get_viewport_rect().size
+	var sky_top := Color(0.02, 0.03, 0.08)
+	var sky_bottom := Color(0.07, 0.09, 0.20)
+	var horizon := vs.y * 0.70
+
+	# night sky: vertical gradient in bands
+	var bands := 24
+	for i in bands:
+		var f := i / float(bands)
+		draw_rect(Rect2(0, horizon * f, vs.x, horizon / bands + 1.0),
+				sky_top.lerp(sky_bottom, f))
+
+	# stars (deterministic scatter, denser near the top)
+	for i in 150:
+		var sx: float = fposmod(sin(i * 127.1 + 41.3) * 43758.55, 1.0) * vs.x
+		var sy: float = pow(fposmod(sin(i * 269.5 + 17.7) * 28001.83, 1.0), 1.4) * horizon * 0.95
+		var r: float = 0.5 + fposmod(sin(i * 7.31) * 971.5, 1.0) * 1.1
+		var a: float = 0.35 + 0.55 * fposmod(sin(i * 3.7) * 337.1, 1.0)
+		draw_circle(Vector2(sx, sy), r, Color(0.90, 0.92, 1.0, a))
+
+	# crescent moon: a bright disc with a sky-colored disc biting it
+	var mc := Vector2(vs.x * 0.615, vs.y * 0.26)
+	draw_circle(mc, 58.0, Color(0.93, 0.91, 0.80))
+	draw_circle(mc + Vector2(-22.0, -9.0), 52.0, sky_top.lerp(sky_bottom, 0.37))
+
+	# ground: a dark hill the fortress stands on
+	draw_rect(Rect2(0, horizon, vs.x, vs.y - horizon), Color(0.05, 0.07, 0.06))
+	draw_colored_polygon(PackedVector2Array([
+		Vector2(vs.x * 0.18, horizon), Vector2(vs.x * 0.82, horizon),
+		Vector2(vs.x * 0.92, vs.y), Vector2(vs.x * 0.08, vs.y)]),
+		Color(0.07, 0.10, 0.08))
+
+	_draw_title_fortress(Vector2(vs.x * 0.5, horizon))
+
+	# title
+	var title := "GREY FORTRESS"
+	var tw: float = font.get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, 58).x
+	draw_string(font, Vector2((vs.x - tw) * 0.5 + 3, vs.y * 0.135 + 3), title,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 58, Color(0, 0, 0, 0.7))
+	draw_string(font, Vector2((vs.x - tw) * 0.5, vs.y * 0.135), title,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 58, Color(0.88, 0.86, 0.78))
+	var sub := "a tiny roguelike"
+	var sw: float = font.get_string_size(sub, HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x
+	draw_string(font, Vector2((vs.x - sw) * 0.5, vs.y * 0.135 + 28), sub,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(0.55, 0.56, 0.65))
+
+	# menu
+	var rects: Array = game.title_menu_rects()
+	for i in rects.size():
+		var r: Rect2 = rects[i]
+		var enabled: bool = i != 1 or game.has_save()
+		var selected: bool = game.title_index == i
+		draw_rect(r, Color(0.16, 0.19, 0.30, 0.92) if selected else Color(0.07, 0.08, 0.13, 0.88))
+		draw_rect(r, Color(0.85, 0.72, 0.20) if selected else Color(0.32, 0.32, 0.40), false, 1.0)
+		var label: String = game.TITLE_MENU[i]
+		if i == 1 and not enabled:
+			label += "  (no save)"
+		var lw: float = font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 16).x
+		draw_string(font, Vector2(r.position.x + (r.size.x - lw) * 0.5, r.position.y + 24.0),
+				label, HORIZONTAL_ALIGNMENT_LEFT, -1, 16,
+				Color(0.92, 0.90, 0.80) if enabled else Color(0.42, 0.42, 0.50))
+
+# The fortress silhouette; `base` is the middle of its footprint.
+func _draw_title_fortress(base: Vector2) -> void:
+	var wall := Color(0.30, 0.31, 0.36)
+	var wall_dark := Color(0.22, 0.23, 0.28)
+	var window := Color(0.95, 0.80, 0.35)
+
+	# curtain wall with crenellations
+	draw_rect(Rect2(base + Vector2(-190, -95), Vector2(380, 95)), wall_dark)
+	for i in 13:
+		draw_rect(Rect2(base + Vector2(-190 + i * 30, -107), Vector2(16, 12)), wall_dark)
+	# side towers
+	for side in [-1.0, 1.0]:
+		var tx: float = base.x + side * 190.0 - 27.0
+		draw_rect(Rect2(Vector2(tx, base.y - 160), Vector2(54, 160)), wall)
+		for i in 3:
+			draw_rect(Rect2(Vector2(tx - 4 + i * 21, base.y - 174), Vector2(13, 14)), wall)
+		draw_rect(Rect2(Vector2(tx + 21, base.y - 130), Vector2(9, 14)), window)
+	# central keep
+	draw_rect(Rect2(base + Vector2(-52, -200), Vector2(104, 200)), wall)
+	for i in 4:
+		draw_rect(Rect2(base + Vector2(-52 + i * 27, -215), Vector2(15, 15)), wall)
+	draw_rect(Rect2(base + Vector2(-32, -170), Vector2(10, 16)), window)
+	draw_rect(Rect2(base + Vector2(20, -140), Vector2(10, 16)), window)
+	# banner pole on the keep
+	draw_line(base + Vector2(0, -215), base + Vector2(0, -250), Color(0.5, 0.5, 0.55), 2.0)
+	draw_colored_polygon(PackedVector2Array([
+		base + Vector2(0, -250), base + Vector2(30, -243), base + Vector2(0, -236)]),
+		Color(0.45, 0.14, 0.14))
+	# gate: an arch in the curtain wall
+	draw_rect(Rect2(base + Vector2(-22, -52), Vector2(44, 52)), Color(0.05, 0.05, 0.08))
+	draw_circle(base + Vector2(0, -52), 22.0, Color(0.05, 0.05, 0.08))
 
 
 # ---------------- "Entering..." area banner ----------------
@@ -132,6 +236,9 @@ const MINI_COLORS := {
 }
 
 func _draw_minimap() -> void:
+	if game.current_map == "west":
+		_draw_minimap_west()
+		return
 	var vs := get_viewport_rect().size
 	var pad := 7.0
 	var gap := 3.0
@@ -170,6 +277,48 @@ func _draw_minimap() -> void:
 		else:
 			draw_rect(Rect2(mx, yy, mw, mh), Color(0.25, 0.25, 0.30), false, 1.0)
 		yy += mh + gap
+
+	draw_string(font, Vector2(px + (w - label_w) * 0.5, py + h - 6.0), label,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.92, 0.88, 0.75))
+
+# Westmere gets its own minimap: the village itself, with the region
+# beyond its boarded north gate marked "work in progress".
+func _draw_minimap_west() -> void:
+	var vs := get_viewport_rect().size
+	var pad := 7.0
+	var def: Dictionary = game.MAP_DEFS["west"]
+	var mw: float = def["w"] * 2.0
+	var mh: float = def["h"] * 2.0
+	var wip_h := 44.0
+	var label: String = def["name"]
+	var label_w: float = font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x
+	var w: float = max(mw, label_w) + pad * 2
+	var h: float = wip_h + 3.0 + mh + pad * 2 + 17.0
+	var px := vs.x - w - 10.0
+	var py := vs.y - BAR_H - h - 10.0
+
+	draw_rect(Rect2(px, py, w, h), Color(0.06, 0.06, 0.09, 0.80))
+	draw_rect(Rect2(px, py, w, h), Color(0.35, 0.35, 0.42), false, 1.0)
+
+	# the unexplored region north of the gate
+	var wip := Rect2(px + pad, py + pad, w - pad * 2, wip_h)
+	draw_rect(wip, Color(0.10, 0.10, 0.13))
+	draw_rect(wip, Color(0.30, 0.30, 0.36), false, 1.0)
+	var wip_text := "work in progress"
+	var ww: float = font.get_string_size(wip_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x
+	draw_string(font, Vector2(wip.position.x + (wip.size.x - ww) * 0.5, wip.position.y + 27),
+			wip_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.55, 0.55, 0.62))
+
+	# the village, with the player dot
+	var mx: float = px + (w - mw) * 0.5
+	var my: float = py + pad + wip_h + 3.0
+	draw_rect(Rect2(mx, my, mw, mh), Color(0.36, 0.42, 0.30))
+	draw_rect(Rect2(mx, my, mw, mh), Color(0.85, 0.72, 0.20), false, 1.0)
+	var dot := Vector2(
+			mx + (game.player_pos.x + 0.5) / float(def["w"]) * mw,
+			my + (game.player_pos.y + 0.5) / float(def["h"]) * mh)
+	draw_circle(dot, 2.2, Color(1.0, 0.95, 0.75))
+	draw_circle(dot, 2.2, Color(0.3, 0.2, 0.0), false, 0.8)
 
 	draw_string(font, Vector2(px + (w - label_w) * 0.5, py + h - 6.0), label,
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.92, 0.88, 0.75))
@@ -354,29 +503,50 @@ func _draw_victory() -> void:
 # ---------------- game over ----------------
 func _draw_game_over() -> void:
 	var vs := get_viewport_rect().size
-	draw_rect(Rect2(0, 0, vs.x, vs.y), Color(0.05, 0.02, 0.02, 0.55))
+	draw_rect(Rect2(0, 0, vs.x, vs.y), Color(0.05, 0.02, 0.02, 0.60))
+	var w := 460.0
+	var h := 240.0
+	var px := (vs.x - w) * 0.5
+	var py := vs.y * 0.30
+	draw_rect(Rect2(px - 4, py - 4, w + 8, h + 8), Color(0.42, 0.28, 0.26))
+	draw_rect(Rect2(px, py, w, h), Color(0.10, 0.06, 0.06, 0.96))
+
 	var text := "You died in %s" % game.MAP_DEFS[game.current_map]["name"]
-	var w: float = font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 26).x
-	draw_string(font, Vector2((vs.x - w) * 0.5, vs.y * 0.45), text,
-			HORIZONTAL_ALIGNMENT_LEFT, -1, 26, Color(0.9, 0.75, 0.7))
-	var hint := "Press Enter to restart"
-	var w2: float = font.get_string_size(hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x
-	draw_string(font, Vector2((vs.x - w2) * 0.5, vs.y * 0.45 + 34), hint,
-			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(0.7, 0.7, 0.72))
+	var tw: float = font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 24).x
+	draw_string(font, Vector2(px + (w - tw) * 0.5, py + 42), text,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 24, Color(0.9, 0.72, 0.66))
+
+	var lines := [
+		["Journey began", game.run_start_text],
+		["Journey ended", game.run_end_text],
+		["Steps taken", str(game.move_count)],
+		["Level reached", str(game.player_level)],
+	]
+	for i in lines.size():
+		var yy: float = py + 84 + i * 26
+		draw_string(font, Vector2(px + 40, yy), lines[i][0] + ":",
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.62, 0.55, 0.52))
+		draw_string(font, Vector2(px + 190, yy), lines[i][1],
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.88, 0.85, 0.80))
+
+	var hint := "Enter: try again      Esc: title screen"
+	var hw: float = font.get_string_size(hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x
+	draw_string(font, Vector2(px + (w - hw) * 0.5, py + h - 22), hint,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.68, 0.62, 0.60))
 
 
 # ---------------- options ----------------
 func _draw_panel_options() -> void:
 	match game.options_screen:
 		"main":
-			var p := _panel(420.0, 220.0, "Options")
+			var p := _panel(420.0, 250.0, "Options")
 			for i in game.OPT_MAIN.size():
 				var yy: float = p.y + 62 + i * 30
 				if game.opt_index == i:
 					draw_rect(Rect2(p.x + 8, yy - 18, 404, 26), Color(0.22, 0.26, 0.36))
 				draw_string(font, Vector2(p.x + 20, yy), game.OPT_MAIN[i],
 						HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(0.88, 0.88, 0.9))
-			draw_string(font, Vector2(p.x + 16, p.y + 204), "Up/Down + Enter, or click/tap. Esc closes.",
+			draw_string(font, Vector2(p.x + 16, p.y + 234), "Up/Down + Enter, or click/tap. Esc closes.",
 					HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.5, 0.5, 0.58))
 		"graphics":
 			var p := _panel(420.0, 150.0, "Options - Graphics")

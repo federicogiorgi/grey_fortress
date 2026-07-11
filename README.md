@@ -11,6 +11,9 @@ export was removed).
 
 ## Controls
 
+The game opens on a title screen (the fortress under a crescent moon)
+with New Game / Continue / Quit — arrows + Enter or mouse.
+
 Movement is keyboard-only; the mouse operates the UI.
 
 - Arrows / WASD: move (bump to attack, talk, pray, pick up)
@@ -27,14 +30,20 @@ Movement is keyboard-only; the mouse operates the UI.
   click options menu entries and drag the volume slider
 - F11: toggle fullscreen
 - Enter: restart after death, dismiss the victory screen
+- Esc on the death screen: back to the title screen
 
-## The world (4 maps, each 4000x3008 px, camera follows you)
+## The world (camera follows you)
 
 1. Grey Fortress Town: 4 vendor houses, healing temple, north gate
 2. Northern Wilds: rats, goblins, wild boars
 3. Dark Forest: wolves join in, denser trees
 4. Ancient Ruins: swarming with skeletons, plus goblins and trolls;
    the Sunstone Relic lies between two trees near the north end
+5. Westmere Village (west of town, unlocked by the Sunstone Relic
+   quest): larger than town, eight vendors (stubs for now — shops
+   and quests come later), a temple at the bottom, and a boarded-up
+   north gate to a future region (work in progress); its minimap
+   shows the village and the unexplored land beyond
 
 A winding road connects the south and north gates of every map,
 so you can never be walled in by the procedural generation.
@@ -64,7 +73,15 @@ ears, boar tusks, wolf muzzle, skull, troll underbite).
   synthesized rain loop with animated streaks, plus occasional
   distant lightning (thunder rumble and a brief screen flash)
 - Quests: each vendor gives one on first talk; return when done
-  (kill 5 rats, kill 3 goblins, bring 10 coins, fetch the relic)
+  (kill 5 rats, kill 3 goblins, bring 10 coins, fetch the relic);
+  the relic quest rewards Leather Armor (+4 max HP, chest slot,
+  drawn on the hero) and opens the west gate of town
+- Save / load: "Save Game" in the options menu writes
+  user://save.json; "Continue" on the title screen restores it
+  (the world regenerates deterministically, so only the dynamic
+  state — player, quests, surviving mobs, remaining loot — is saved)
+- Death screen: shows when the run began and ended, steps taken,
+  and the level you reached
 - Victory: finishing all four quests shows a "Victory!" screen with
   the number of moves the run took; you can keep exploring after
 - Temple altar: full heal, free, the only healing besides food/potions
@@ -101,11 +118,13 @@ Combat music triggers when any enemy has you inside its sight range and
 relaxes a few turns after you break contact.
 
 The weather ambience (seamless rain loop, distant thunder) is likewise
-synthesized from scratch by tools/make_ambience.py. Public domain (CC0).
+synthesized from scratch by tools/make_ambience.py, and the epic
+title theme by tools/make_title.py. Public domain (CC0).
 
 ## Next steps
 
 - Mob variety per map depth, ranged enemies
-- Save/load (serialize map_state + player dict to JSON)
-- Sound effects, title screen
+- Real shops and quests for the eight Westmere vendors
+- The region beyond Westmere's boarded north gate
+- Sound effects
 - Steam integration (achievements, cloud saves)

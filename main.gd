@@ -1,24 +1,28 @@
 extends Node2D
 # =============================================================
-#  GREY FORTRESS - v5
+#  GREY FORTRESS - v6
 #
 #  New in this version:
-#   - World minimap in the bottom-right corner: the four maps
-#     stacked north-to-south, player dot, current area name
-#   - Mobs have drawn face icons instead of letter glyphs;
-#     more skeletons haunt the Ancient Ruins
-#   - Weather: 10% chance of rain on entering an area (looping
-#     rain ambience, animated streaks, occasional lightning
-#     with a thunder rumble and a brief screen flash)
-#   - Second, stronger item tier at every vendor; world loot
-#     (outposts) is now clearly the most powerful gear
-#   - Half of the slain mobs respawn when you re-enter a map
+#   - Title screen: the fortress under a crescent moon in a
+#     starry night, with its own epic theme (tools/make_title.py)
+#     and a New Game / Continue / Quit menu
+#   - Save / load: "Save Game" in the options menu writes
+#     user://save.json; "Continue" on the title screen restores it
+#   - Death screen shows when the run started and ended and how
+#     many steps it lasted
+#   - Completing the Sunstone Relic quest awards Leather Armor
+#     (+4 HP, chest) and opens a west gate in town; days of travel
+#     lead to Westmere Village: larger than town, a temple at the
+#     bottom, eight vendors (stubs for now) and a boarded north
+#     gate to a future region (work in progress)
+#   - Goblins are green, as goblins should be
 #
-#  v4: unique vendor symbols, shop sell/buyback, victory screen,
-#  clickable HUD buttons, Android support removed (Steam only)
+#  v5: minimap, mob face icons, rain weather, two-tier vendors,
+#  mob respawning. v4: unique vendors, sell/buyback, victory
+#  screen, clickable HUD, Android removed (Steam only).
 # =============================================================
 
-enum Mode { PLAY, INVENTORY, JOURNAL, SHOP, OPTIONS }
+enum Mode { TITLE, PLAY, INVENTORY, JOURNAL, SHOP, OPTIONS }
 
 const TILE := 32
 const BAR_H := 84                 # must match hud.gd
@@ -28,7 +32,9 @@ const MOVE_DELAY_REPEAT := 0.115  # steps per second while holding ~ 8.7
 # ---- world definition -------------------------------------
 const MAP_DEFS := {
 	"town": {
-		"name": "Grey Fortress Town", "north": "wilds", "music": "town",
+		# The west gate exists in the def but its "<" tiles are only
+		# carved into the map once the Sunstone Relic quest is done.
+		"name": "Grey Fortress Town", "north": "wilds", "west": "west", "music": "town",
 		"w": 42, "h": 30,
 		"tree_density": 0.040, "water_blobs": 0, "mobs": {},
 	},
@@ -53,6 +59,14 @@ const MAP_DEFS := {
 		"mobs": { "s": 14, "g": 6, "t": 4 },
 		"outpost": { "x": 28, "y": 58, "item": "legplates" },
 	},
+	# Reached through the west gate of town, which only opens once the
+	# Sunstone Relic quest is complete. Its own north gate is boarded
+	# up: a future region, still work in progress.
+	"west": {
+		"name": "Westmere Village", "east": "town", "music": "town",
+		"w": 50, "h": 36,
+		"tree_density": 0.035, "water_blobs": 0, "mobs": {},
+	},
 }
 
 # The world from north to south, for the HUD minimap.
@@ -63,7 +77,7 @@ const MOB_TYPES := {
 	"r": { "name": "rat",       "hp": 2,  "dmg": 1, "sight": 10, "xp": 3,
 			"coins": [1, 2],   "color": Color(0.50, 0.42, 0.32) },
 	"g": { "name": "goblin",    "hp": 3,  "dmg": 1, "sight": 8,  "xp": 5,
-			"coins": [2, 4],   "color": Color(0.70, 0.20, 0.18) },
+			"coins": [2, 4],   "color": Color(0.32, 0.52, 0.20) },
 	"b": { "name": "wild boar", "hp": 5,  "dmg": 2, "sight": 5,  "xp": 8,
 			"coins": [3, 6],   "color": Color(0.38, 0.24, 0.14) },
 	"w": { "name": "wolf",      "hp": 4,  "dmg": 2, "sight": 10, "xp": 10,
@@ -116,6 +130,8 @@ const ITEMS := {
 			"desc": "+14 inventory slots" },
 	"relic":  { "name": "Sunstone Relic",   "price": 0,
 			"desc": "Quest item, warm to the touch" },
+	"armor":  { "name": "Leather Armor",    "price": 0, "slot": 5,  "hp": 4,
+			"desc": "+4 max HP" },
 	"boots":  { "name": "Scout's Boots",     "price": 0, "slot": 8,  "hp": 6,
 			"desc": "+6 max HP" },
 	"bow":    { "name": "Hunter's Bow",      "price": 0, "slot": 18, "dmg": 3,
@@ -164,8 +180,30 @@ const VENDORS := [
 		"quest": { "desc": "Recover the Sunstone Relic from the Ancient Ruins",
 				"type": "item", "target": "relic", "need": 1,
 				"intro": "Legend places the Sunstone Relic in the ruins far north, between two trees. Bring it to me.",
-				"reward_coins": 60, "reward_xp": 50 },
+				"reward_coins": 60, "reward_items": { "armor": 1 }, "reward_xp": 50,
+				"opens_west": true },
 	},
+]
+
+# Westmere's eight vendors are stubs for now: they greet you, but
+# their shops and quests come with a later version.
+const WEST_VENDORS := [
+	{ "name": "Wren the weaver",    "short": "Wren",  "symbol": "bag",
+			"greet": "Wren: Finest cloth west of the fortress... once my loom is fixed." },
+	{ "name": "Tobin the butcher",  "short": "Tobin", "symbol": "bread",
+			"greet": "Tobin: Nothing to sell yet. The pigs got away." },
+	{ "name": "Mira the herbalist", "short": "Mira",  "symbol": "flask",
+			"greet": "Mira: Still gathering herbs. Come back another season." },
+	{ "name": "Galt the armorer",   "short": "Galt",  "symbol": "anvil",
+			"greet": "Galt: Forge is cold. Ask me again when the coal arrives." },
+	{ "name": "Sela the jeweler",   "short": "Sela",  "symbol": "bag",
+			"greet": "Sela: Gems, soon. The caravan is late." },
+	{ "name": "Odo the fletcher",   "short": "Odo",   "symbol": "anvil",
+			"greet": "Odo: No arrows today. The geese are on strike." },
+	{ "name": "Ivy the brewer",     "short": "Ivy",   "symbol": "flask",
+			"greet": "Ivy: The first batch is still fermenting." },
+	{ "name": "Pell the baker",     "short": "Pell",  "symbol": "bread",
+			"greet": "Pell: Oven's not built yet. Alda sends her regards." },
 ]
 
 # ---- state -------------------------------------------------
@@ -200,8 +238,11 @@ var buyback := {}       # vendor set_idx -> [{id, price}] items sold to them
 var messages := []
 var game_over := false
 var move_count := 0
+var run_start_text := ""   # wall-clock time the run began / ended,
+var run_end_text := ""     # shown on the death screen
 var victory_banner := false
 var victory_moves := 0
+var title_index := 0
 var held_dir := Vector2i.ZERO
 var move_timer := 0.0
 
@@ -259,7 +300,16 @@ func _ready() -> void:
 	thunder_player.stream = load("res://audio/thunder.ogg")
 	add_child(thunder_player)
 	_apply_volume()
-	_start()
+	_show_title()
+
+func _show_title() -> void:
+	mode = Mode.TITLE
+	title_index = 0
+	game_over = false
+	victory_banner = false
+	_set_rain(false)
+	_play_track("title")
+	_refresh()
 
 func _start() -> void:
 	base_max_hp = 12
@@ -277,6 +327,8 @@ func _start() -> void:
 	player_mana = player_max_mana
 	game_over = false
 	move_count = 0
+	run_start_text = Time.get_datetime_string_from_system(false, true)
+	run_end_text = ""
 	victory_banner = false
 	victory_moves = 0
 	buyback = {}
@@ -381,7 +433,13 @@ func _load_map(id: String, arrive: String) -> void:
 			player_pos = st["south_gate"] + Vector2i(0, -1)
 		"north_gate":
 			player_pos = st["north_gate"] + Vector2i(0, 1)
-	if revisit:
+		"east_gate":
+			player_pos = st["east_gate"] + Vector2i(-1, 0)
+		"west_gate":
+			player_pos = st["west_gate"] + Vector2i(1, 0)
+		"keep":
+			pass   # loading a save: player_pos is restored by the caller
+	if revisit and arrive != "keep":
 		_respawn_mobs()
 	camera.limit_left = 0
 	# The camera has a +BAR_H/2 vertical offset (so the player is centered
@@ -472,6 +530,33 @@ func _generate_map(id: String) -> Dictionary:
 			for x in range(gx - 1, gx + 3):
 				g[y][x] = "."
 
+	# 6b. Westmere: a larger village. Eight vendor houses in two rows,
+	# the temple at the bottom, an east gate back to town, and a
+	# boarded-up north gate (a future region, work in progress).
+	var west_gate := Vector2i(-1, -1)
+	var east_gate := Vector2i(-1, -1)
+	if id == "west":
+		for y in range(4, 32):
+			for x in range(5, 45):
+				g[y][x] = "."
+		for i in 4:
+			_place_house(g, 7 + i * 10, 6, vs, "west")
+			_place_house(g, 7 + i * 10, 16, vs, "west")
+		_place_temple(g, 21, 27, altars)
+		spawn = Vector2i(w / 2, 12)
+		var ey := h / 2   # east gate row
+		_clear_area(g, w - 5, ey - 1, 4, 4)
+		g[ey][w - 1] = ">"
+		g[ey + 1][w - 1] = ">"
+		east_gate = Vector2i(w - 1, ey)
+		# boarded north gate, with a road that ends at it
+		_clear_area(g, gx - 2, 1, 6, 3)
+		g[0][gx] = "B"
+		g[0][gx + 1] = "B"
+		for y in range(1, 5):
+			for x in range(gx - 1, gx + 3):
+				g[y][x] = "."
+
 	# 7. The Sunstone Relic, between two trees (ruins map only).
 	if id == "ruins":
 		for y in range(10, 15):
@@ -529,6 +614,7 @@ func _generate_map(id: String) -> Dictionary:
 	return {
 		"grid": g, "mobs": ms, "vendors": vs, "items": items, "altars": altars,
 		"spawn": spawn, "north_gate": north_gate, "south_gate": south_gate,
+		"west_gate": west_gate, "east_gate": east_gate,
 	}
 
 func _clear_area(g: Array, x0: int, y0: int, w: int, h: int) -> void:
@@ -536,8 +622,9 @@ func _clear_area(g: Array, x0: int, y0: int, w: int, h: int) -> void:
 		for x in range(x0, x0 + w):
 			g[y][x] = "."
 
-# 5x4 house with a bottom door and a vendor inside.
-func _place_house(g: Array, x0: int, y0: int, vs: Array) -> void:
+# 5x4 house with a bottom door and a vendor inside. `set_name` picks
+# which vendor roster (VENDORS or WEST_VENDORS) the occupant is from.
+func _place_house(g: Array, x0: int, y0: int, vs: Array, set_name: String = "town") -> void:
 	for x in range(x0, x0 + 5):
 		g[y0][x] = "H"
 		g[y0 + 3][x] = "H"
@@ -547,7 +634,7 @@ func _place_house(g: Array, x0: int, y0: int, vs: Array) -> void:
 		for x in range(x0 + 1, x0 + 4):
 			g[y][x] = "."
 	g[y0 + 3][x0 + 2] = "D"
-	vs.append({ "pos": Vector2i(x0 + 2, y0 + 1), "set_idx": vs.size() })
+	vs.append({ "pos": Vector2i(x0 + 2, y0 + 1), "set_idx": vs.size(), "set": set_name })
 
 # 7x4 temple with an altar and a north-facing door (toward the plaza).
 func _place_temple(g: Array, x0: int, y0: int, altars: Array) -> void:
@@ -629,9 +716,15 @@ func _unhandled_input(event: InputEvent) -> void:
 		_save_settings()
 		return
 
+	if mode == Mode.TITLE:
+		_title_input(event.keycode)
+		return
+
 	if game_over:
 		if event.keycode == KEY_ENTER or event.keycode == KEY_KP_ENTER:
 			_start()
+		elif event.keycode == KEY_ESCAPE:
+			_show_title()
 		return
 
 	if victory_banner:
@@ -655,6 +748,9 @@ func _unhandled_input(event: InputEvent) -> void:
 # All left-clicks funnel through here. Movement is deliberately NOT
 # mouse-driven: clicks only operate the UI (HUD buttons and panels).
 func _handle_click(mp: Vector2) -> void:
+	if mode == Mode.TITLE:
+		_title_click(mp)
+		return
 	if game_over:
 		_start()
 		return
@@ -942,6 +1038,10 @@ func _try_player_move(dir: Vector2i) -> void:
 		return   # talking does not pass a turn
 	elif tile == "A":
 		_pray()
+	elif tile == "B":
+		_log("The gate is boarded shut. Beyond lies unexplored land. (work in progress)")
+		_refresh()
+		return
 	elif _is_walkable(target):
 		player_pos = target
 		_pickup_items()
@@ -993,14 +1093,19 @@ func _check_transition() -> bool:
 	if tile == "^" and def.has("north"):
 		_load_map(def["north"], "south_gate")
 		_log("You travel north to the %s." % MAP_DEFS[current_map]["name"])
-		_refresh()
-		return true
-	if tile == "v" and def.has("south"):
+	elif tile == "v" and def.has("south"):
 		_load_map(def["south"], "north_gate")
 		_log("You head south to %s." % MAP_DEFS[current_map]["name"])
-		_refresh()
-		return true
-	return false
+	elif tile == "<" and def.has("west"):
+		_load_map(def["west"], "east_gate")
+		_log("After days of journey west, you arrive at %s." % MAP_DEFS[current_map]["name"])
+	elif tile == ">" and def.has("east"):
+		_load_map(def["east"], "west_gate")
+		_log("After days of journey east, you return to %s." % MAP_DEFS[current_map]["name"])
+	else:
+		return false
+	_refresh()
+	return true
 
 func _end_turn() -> void:
 	move_count += 1
@@ -1014,6 +1119,11 @@ func _end_turn() -> void:
 # ---------------------------------------------------------
 func _talk_to_vendor(index: int) -> void:
 	var v = vendors[index]
+	if v.get("set", "town") == "west":
+		# Westmere vendors are stubs: a greeting, no shop, no quest.
+		_log(WEST_VENDORS[v["set_idx"] % WEST_VENDORS.size()]["greet"])
+		_refresh()
+		return
 	var set_idx: int = v["set_idx"]
 	var data: Dictionary = VENDORS[set_idx % VENDORS.size()]
 	var q: Dictionary = quests[set_idx % quests.size()]
@@ -1062,7 +1172,28 @@ func _complete_quest(q: Dictionary) -> void:
 	q["state"] = "done"
 	_log("Quest complete: %s! Reward: %s." % [q["desc"], ", ".join(reward_bits)])
 	_gain_xp(q["reward_xp"])
+	if q.get("opens_west", false):
+		_open_west_gate()
 	_check_victory()
+
+# Carves the west gate into the (already generated) town map and
+# connects it to the plaza. Called when the Sunstone Relic quest is
+# turned in, and again after loading a save where it was done.
+func _open_west_gate() -> void:
+	if not map_state.has("town"):
+		return
+	var st: Dictionary = map_state["town"]
+	if st["west_gate"].x >= 0:
+		return   # already open
+	var g: Array = st["grid"]
+	var gy: int = g.size() / 2
+	for y in range(gy - 1, gy + 3):
+		for x in range(1, 7):
+			g[y][x] = "."
+	g[gy][0] = "<"
+	g[gy + 1][0] = "<"
+	st["west_gate"] = Vector2i(0, gy)
+	_log("The west gate of town rumbles open!")
 
 func _check_victory() -> void:
 	for q in quests:
@@ -1213,10 +1344,158 @@ func xp_needed() -> int:
 
 
 # ---------------------------------------------------------
+#  Title screen menu. Geometry is shared with hud.gd via
+#  title_menu_rects().
+# ---------------------------------------------------------
+const TITLE_MENU := ["New Game", "Continue", "Quit"]
+
+func title_menu_rects() -> Array:
+	var vs := get_viewport_rect().size
+	var rects := []
+	for i in TITLE_MENU.size():
+		rects.append(Rect2(vs.x * 0.5 - 120.0, vs.y * 0.74 + i * 44.0, 240.0, 36.0))
+	return rects
+
+func _title_input(key: int) -> void:
+	match key:
+		KEY_UP, KEY_W:
+			title_index = max(title_index - 1, 0)
+			_refresh()
+		KEY_DOWN, KEY_S:
+			title_index = min(title_index + 1, TITLE_MENU.size() - 1)
+			_refresh()
+		KEY_ENTER, KEY_KP_ENTER:
+			_title_activate(title_index)
+
+func _title_click(mp: Vector2) -> void:
+	var rects := title_menu_rects()
+	for i in rects.size():
+		if (rects[i] as Rect2).has_point(mp):
+			title_index = i
+			_title_activate(i)
+			return
+
+func _title_activate(i: int) -> void:
+	match i:
+		0:
+			_start()
+		1:
+			if has_save():
+				_load_game()
+		2:
+			get_tree().quit()
+
+
+# ---------------------------------------------------------
+#  Save / load. The world regenerates deterministically, so a
+#  save only stores the dynamic state: player, quests, and the
+#  surviving mobs / remaining ground items of each visited map.
+# ---------------------------------------------------------
+const SAVE_PATH := "user://save.json"
+
+func has_save() -> bool:
+	return FileAccess.file_exists(SAVE_PATH)
+
+func _save_game() -> void:
+	var maps := {}
+	for id in map_state:
+		var st: Dictionary = map_state[id]
+		var ms := []
+		for m in st["mobs"]:
+			ms.append({ "x": m["pos"].x, "y": m["pos"].y, "hp": m["hp"], "type": m["type"] })
+		var its := []
+		for it in st["items"]:
+			its.append({ "x": it["pos"].x, "y": it["pos"].y, "id": it["id"] })
+		maps[id] = { "mobs": ms, "items": its }
+	var equip := {}
+	for slot in equipment:
+		equip[str(slot)] = equipment[slot]
+	var qs := []
+	for q in quests:
+		qs.append({ "state": q["state"], "progress": q["progress"] })
+	var data := {
+		"version": 1,
+		"base_max_hp": base_max_hp, "base_dmg": base_dmg, "base_max_mana": base_max_mana,
+		"player_level": player_level, "player_xp": player_xp,
+		"player_hp": player_hp, "player_mana": player_mana,
+		"coins": coins, "inventory": inventory, "equipment": equip,
+		"quests": qs, "buyback": buyback,
+		"current_map": current_map, "px": player_pos.x, "py": player_pos.y,
+		"move_count": move_count, "run_start_text": run_start_text,
+		"visited": visited.keys(), "maps": maps,
+	}
+	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
+	f.store_string(JSON.stringify(data))
+	f.close()
+	_log("Game saved.")
+
+func _load_game() -> void:
+	var f := FileAccess.open(SAVE_PATH, FileAccess.READ)
+	if f == null:
+		return
+	var data = JSON.parse_string(f.get_as_text())
+	f.close()
+	if typeof(data) != TYPE_DICTIONARY:
+		_log("The save file could not be read.")
+		return
+	_start()   # clean slate: quests rebuilt, town generated
+	base_max_hp = int(data["base_max_hp"])
+	base_dmg = int(data["base_dmg"])
+	base_max_mana = int(data["base_max_mana"])
+	player_level = int(data["player_level"])
+	player_xp = int(data["player_xp"])
+	coins = int(data["coins"])
+	move_count = int(data["move_count"])
+	run_start_text = data["run_start_text"]
+	inventory = {}
+	for id in data["inventory"]:
+		inventory[id] = int(data["inventory"][id])
+	equipment = {}
+	for slot in data["equipment"]:
+		equipment[int(slot)] = data["equipment"][slot]
+	for i in mini(quests.size(), data["quests"].size()):
+		quests[i]["state"] = data["quests"][i]["state"]
+		quests[i]["progress"] = int(data["quests"][i]["progress"])
+	buyback = {}
+	for key in data["buyback"]:
+		var bb := []
+		for e in data["buyback"][key]:
+			bb.append({ "id": e["id"], "price": int(e["price"]) })
+		buyback[int(key)] = bb
+	visited = {}
+	for id in data["visited"]:
+		visited[id] = true
+	# regenerate each visited map, then overwrite its dynamic state
+	map_state = {}
+	for id in data["maps"]:
+		map_state[id] = _generate_map(id)
+		var st: Dictionary = map_state[id]
+		var ms := []
+		for m in data["maps"][id]["mobs"]:
+			ms.append({ "pos": Vector2i(int(m["x"]), int(m["y"])), "hp": int(m["hp"]), "type": m["type"] })
+		st["mobs"] = ms
+		var its := []
+		for it in data["maps"][id]["items"]:
+			its.append({ "pos": Vector2i(int(it["x"]), int(it["y"])), "id": it["id"] })
+		st["items"] = its
+	for q in quests:
+		if q["state"] == "done" and q.get("opens_west", false):
+			_open_west_gate()
+	player_pos = Vector2i(int(data["px"]), int(data["py"]))
+	_load_map(data["current_map"], "keep")
+	_recalc_stats()
+	player_hp = int(data["player_hp"])
+	player_mana = int(data["player_mana"])
+	messages = []
+	_log("Game loaded. Welcome back.")
+	_refresh()
+
+
+# ---------------------------------------------------------
 #  Options: sound (master volume), keybinds, graphics.
 #  Settings persist to user://settings.cfg.
 # ---------------------------------------------------------
-const OPT_MAIN := ["Graphics", "Sound", "Keybinds", "Back"]
+const OPT_MAIN := ["Graphics", "Sound", "Keybinds", "Save Game", "Back"]
 const REBIND_ACTIONS := ["up", "down", "left", "right",
 		"up_left", "up_right", "down_left", "down_right",
 		"wait", "character", "journal", "options"]
@@ -1244,6 +1523,10 @@ func _options_input(key: int) -> void:
 					1: options_screen = "sound"
 					2: options_screen = "keybinds"
 					3:
+						_save_game()
+						_close_panel()
+						return
+					4:
 						_close_panel()
 						return
 				opt_index = 0
@@ -1294,7 +1577,7 @@ func _options_click(mp: Vector2, is_press: bool) -> void:
 			if not is_press:
 				return
 			var w := 420.0
-			var h := 220.0
+			var h := 250.0
 			var px := (vs.x - w) * 0.5
 			var py := (vs.y - BAR_H - h) * 0.5
 			for i in OPT_MAIN.size():
@@ -1306,6 +1589,10 @@ func _options_click(mp: Vector2, is_press: bool) -> void:
 						1: options_screen = "sound"
 						2: options_screen = "keybinds"
 						3:
+							_save_game()
+							_close_panel()
+							return
+						4:
 							_close_panel()
 							return
 					opt_index = 0
@@ -1464,6 +1751,7 @@ func _mob_turn() -> void:
 					% [t["name"], t["dmg"], max(player_hp, 0), player_max_hp])
 			if player_hp <= 0:
 				game_over = true
+				run_end_text = Time.get_datetime_string_from_system(false, true)
 				_log("You died. Press Enter to restart.")
 				return
 			continue
@@ -1508,8 +1796,7 @@ func _in_bounds(p: Vector2i) -> bool:
 func _is_walkable(p: Vector2i) -> bool:
 	if not _in_bounds(p):
 		return false
-	var c: String = grid[p.y][p.x]
-	return c == "." or c == "D" or c == "^" or c == "v"
+	return grid[p.y][p.x] in [".", "D", "^", "v", "<", ">"]
 
 func _is_free(p: Vector2i) -> bool:
 	if not _is_walkable(p):
@@ -1612,15 +1899,26 @@ func _draw_tile(x: int, y: int) -> void:
 			draw_rect(inner, Color(0.16, 0.30, 0.50))
 			draw_rect(Rect2(pos + Vector2(6, 12), Vector2(10, 2)), Color(0.35, 0.50, 0.70))
 			draw_rect(Rect2(pos + Vector2(16, 22), Vector2(10, 2)), Color(0.35, 0.50, 0.70))
-		"^", "v":
+		"^", "v", "<", ">":
 			draw_rect(inner, Color(0.42, 0.34, 0.22))
 			var mid := pos + Vector2(TILE, TILE) * 0.5
 			var pts: PackedVector2Array
-			if c == "^":
-				pts = PackedVector2Array([mid + Vector2(0, -9), mid + Vector2(8, 7), mid + Vector2(-8, 7)])
-			else:
-				pts = PackedVector2Array([mid + Vector2(0, 9), mid + Vector2(8, -7), mid + Vector2(-8, -7)])
+			match c:
+				"^":
+					pts = PackedVector2Array([mid + Vector2(0, -9), mid + Vector2(8, 7), mid + Vector2(-8, 7)])
+				"v":
+					pts = PackedVector2Array([mid + Vector2(0, 9), mid + Vector2(8, -7), mid + Vector2(-8, -7)])
+				"<":
+					pts = PackedVector2Array([mid + Vector2(-9, 0), mid + Vector2(7, 8), mid + Vector2(7, -8)])
+				">":
+					pts = PackedVector2Array([mid + Vector2(9, 0), mid + Vector2(-7, 8), mid + Vector2(-7, -8)])
 			draw_colored_polygon(pts, Color(0.85, 0.78, 0.55))
+		"B":
+			# boarded-up gate: dark timber with crossed planks
+			draw_rect(inner, Color(0.30, 0.22, 0.12))
+			draw_line(pos + Vector2(4, 6), pos + Vector2(TILE - 4, TILE - 6), Color(0.48, 0.36, 0.18), 3.0)
+			draw_line(pos + Vector2(4, TILE - 6), pos + Vector2(TILE - 4, 6), Color(0.48, 0.36, 0.18), 3.0)
+			draw_rect(Rect2(pos + Vector2(3, 13), Vector2(TILE - 6, 5)), Color(0.55, 0.42, 0.22))
 
 func _draw_ground_item(it: Dictionary) -> void:
 	var mid := Vector2(it["pos"]) * TILE + Vector2(TILE, TILE) * 0.5
@@ -1633,7 +1931,8 @@ func _draw_ground_item(it: Dictionary) -> void:
 # trade (bread loaf, anvil, alchemy flask, coin bag) with their
 # name written underneath.
 func _draw_vendor(v: Dictionary) -> void:
-	var data: Dictionary = VENDORS[v["set_idx"] % VENDORS.size()]
+	var roster: Array = WEST_VENDORS if v.get("set", "town") == "west" else VENDORS
+	var data: Dictionary = roster[v["set_idx"] % roster.size()]
 	var center := Vector2(v["pos"]) * TILE + Vector2(TILE, TILE) * 0.5
 	draw_circle(center, 12.0, Color(0.85, 0.72, 0.20))
 	draw_circle(center, 12.0, Color(0.4, 0.32, 0.05), false, 2.0)
@@ -1764,6 +2063,11 @@ func draw_hero_on(ci: CanvasItem, c: Vector2, s: float) -> void:
 	ci.draw_rect(Rect2(c + Vector2(-5, -5) * s, Vector2(10, 8) * s), skin)
 	ci.draw_rect(Rect2(c + Vector2(-8, -5) * s, Vector2(3, 8) * s), skin_sh)   # arms
 	ci.draw_rect(Rect2(c + Vector2(5, -5) * s, Vector2(3, 8) * s), skin_sh)
+	if equipment.has(5):   # leather armor over the torso
+		var leather := Color(0.46, 0.30, 0.14)
+		ci.draw_rect(Rect2(c + Vector2(-5, -5) * s, Vector2(10, 8) * s), leather)
+		ci.draw_line(c + Vector2(-5, -2) * s, c + Vector2(5, -2) * s, leather.darkened(0.35), 1.0 * s)
+		ci.draw_line(c + Vector2(0, -5) * s, c + Vector2(0, 3) * s, leather.darkened(0.35), 1.0 * s)
 	ci.draw_circle(c + Vector2(0, -11) * s, 5.2 * s, hair)                     # hair behind head
 	ci.draw_rect(Rect2(c + Vector2(-6.5, -12) * s, Vector2(2, 9) * s), hair)   # strands
 	ci.draw_rect(Rect2(c + Vector2(4.5, -12) * s, Vector2(2, 9) * s), hair)
