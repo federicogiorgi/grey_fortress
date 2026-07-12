@@ -169,5 +169,6 @@ Public domain (CC0).
 - More dungeon levels below the Sunken Crypt
 - Real shops and quests for the eight Westmere vendors
 - The region beyond Westmere's boarded north gate
-- Spells that interact with the environment
+- Spells that interact with the environment (e.g. fire spells burn trees)
+- Fog of War mechanism and explored map reveal mechanisms
 - Steam integration (achievements, cloud saves)
