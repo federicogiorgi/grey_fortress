@@ -1,3 +1,10 @@
 .godot/
 export_presets.cfg
 *.translation
+
+# Loose build outputs stay local and runnable; the distributable
+# committed to the repo is the zip (the raw exe exceeds GitHub's
+# 100 MB per-file limit).
+Grey Fortress.exe
+Grey Fortress.console.exe
+Grey Fortress.pck

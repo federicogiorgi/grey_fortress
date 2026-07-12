@@ -1,5 +1,7 @@
 # Grey Fortress
 
+![Grey Fortress](docs/banner.png)
+
 A turn-based roguelike prototype in the style of Castle of the Winds,
 built with Godot 4. Desktop-only, targeting a Steam release (the Android
 export was removed).

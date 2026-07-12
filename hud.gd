@@ -472,10 +472,10 @@ func _draw_targeting() -> void:
 
 # ---------------- quest journal ----------------
 func _draw_panel_journal() -> void:
-	var h: float = 90.0 + game.quests.size() * 26.0
-	var p := _panel(560.0, h, "Quest Journal")
-	for i in game.quests.size():
-		var q: Dictionary = game.quests[i]
+	# Build each line first, then size the box to the widest one so
+	# long quest names (e.g. the Sunstone Relic) never overflow.
+	var lines := []
+	for q in game.quests:
 		var text := ""
 		var col := Color(0.85, 0.85, 0.88)
 		match q["state"]:
@@ -497,8 +497,17 @@ func _draw_panel_journal() -> void:
 			"done":
 				text = "%s: %s  [completed]" % [q["giver"], q["desc"]]
 				col = Color(0.45, 0.6, 0.45)
-		draw_string(font, Vector2(p.x + 16, p.y + 58 + i * 26), text,
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 14, col)
+		lines.append({ "text": text, "col": col })
+
+	var content_w := 0.0
+	for ln in lines:
+		content_w = max(content_w, font.get_string_size(ln["text"], HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x)
+	var w: float = clamp(content_w + 32.0, 560.0, get_viewport_rect().size.x - 40.0)
+	var h: float = 90.0 + lines.size() * 26.0
+	var p := _panel(w, h, "Quest Journal")
+	for i in lines.size():
+		draw_string(font, Vector2(p.x + 16, p.y + 58 + i * 26), lines[i]["text"],
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 14, lines[i]["col"])
 	draw_string(font, Vector2(p.x + 16, p.y + h - 16), "Press any key or click to close.",
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.5, 0.5, 0.58))
 
