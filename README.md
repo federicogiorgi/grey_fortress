@@ -20,6 +20,13 @@ Movement is keyboard-only; the mouse operates the UI.
 - Diagonals: Q/E/Z/C, the numpad (1-9, roguelike layout), or two
   cardinal keys held together
 - Space: wait a turn
+- R (or numpad 5): aim the equipped ranged weapon, then click a tile
+  to shoot an animated arrow (Esc cancels; the cursor becomes the
+  projectile while aiming, and the hovered tile is highlighted)
+- T (or middle mouse): aim the active spell the same way
+- P: spellbook — click a spell (or Up/Down + Enter) to make it the
+  active one, castable with T; the active spell and its mana cost
+  are always visible in the HUD bar
 - I: character sheet (equipment paper-doll left, backpack right;
   arrows navigate, Left/Right switch side, Enter equips/uses/removes)
 - J: quest journal
@@ -54,6 +61,16 @@ ears, boar tusks, wolf muzzle, skull, troll underbite).
 
 - Coins: every kill drops some (amount depends on the mob)
 - XP and levels: +3 max HP per level, +1 damage every 2 levels
+- Magic: two spells for now — Magic Dart (3 mana, 2 damage, barely
+  kills a rat) and Fire Boulder (6 mana, 3 damage, barely kills a
+  goblin); projectiles animate to the target, rotated to point at it
+  (spells only hit monsters for now; interacting with the
+  environment is planned)
+- Mana: fully restored by leveling up, praying at the altar, or
+  mana potions (sold by Cyra the alchemist)
+- Ranged weapons (the Hunter's Bow) fire with R for their own
+  damage; they no longer add to melee damage
+- Mobs show a little green HP bar underneath
 - Inventory: bread and potions heal; the relic is a quest item
 - Equipment: all 21 WoW-style slots (ammo through bag); items give
   damage or max HP bonuses; a bag in the Bag slot raises backpack

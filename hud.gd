@@ -29,6 +29,10 @@ func _draw() -> void:
 			_draw_panel_shop()
 		game.Mode.OPTIONS:
 			_draw_panel_options()
+		game.Mode.SPELLBOOK:
+			_draw_panel_spellbook()
+	if game.mode == game.Mode.PLAY and game.targeting != "":
+		_draw_targeting()
 	if game.banner_timer > 0.0:
 		_draw_banner()
 	if game.victory_banner:
@@ -200,9 +204,20 @@ func _draw_bar() -> void:
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.78, 0.78, 0.80))
 		line += 1
 
+	# The active spell, castable with T or the middle mouse button.
+	var sp: Dictionary = game.SPELLS[game.active_spell]
+	var spell_x := vs.x - 428.0
+	draw_rect(Rect2(spell_x, y + 10, 26, 26), Color(0.13, 0.13, 0.18))
+	draw_rect(Rect2(spell_x, y + 10, 26, 26), Color(0.38, 0.38, 0.44), false, 1.0)
+	game.draw_projectile_icon(self, game.active_spell, Vector2(spell_x + 13, y + 23), 0.0, 1.0)
+	draw_string(font, Vector2(spell_x + 34, y + 22), sp["name"],
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.82, 0.82, 0.90))
+	draw_string(font, Vector2(spell_x + 34, y + 37), "%d mana - T casts" % sp["mana"],
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.55, 0.55, 0.62))
+
 	# Clickable panel buttons (movement itself stays keyboard-only).
 	var rects: Array = game.bar_button_rects()
-	var target_modes := [game.Mode.INVENTORY, game.Mode.JOURNAL, game.Mode.OPTIONS]
+	var target_modes := [game.Mode.INVENTORY, game.Mode.JOURNAL, game.Mode.SPELLBOOK, game.Mode.OPTIONS]
 	for i in rects.size():
 		var r: Rect2 = rects[i]
 		var active: bool = game.mode == target_modes[i]
@@ -389,18 +404,71 @@ func _draw_panel_character() -> void:
 		var selected: bool = game.mode == game.Mode.INVENTORY and game.ui_pane == 1 and game.ui_index == i
 		if selected:
 			draw_rect(Rect2(inv_x - 6, yy - 12, 450, 16), Color(0.22, 0.26, 0.36))
+		var usable: bool = it.has("heal") or it.has("mana_heal")
 		var tag := ""
 		if it.has("slot"):
 			tag = "  [" + game.SLOT_NAMES[it["slot"]] + "]"
-		elif it.has("heal"):
+		elif usable:
 			tag = "  [use]"
 		draw_string(font, Vector2(inv_x, yy), "%s x%d%s - %s" % [it["name"], game.inventory[id], tag, it["desc"]],
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 12,
-				Color(0.85, 0.85, 0.88) if (it.has("slot") or it.has("heal")) else Color(0.62, 0.62, 0.68))
+				Color(0.85, 0.85, 0.88) if (it.has("slot") or usable) else Color(0.62, 0.62, 0.68))
 
 	draw_string(font, Vector2(p.x + 16, p.y + h - 14),
 			"Up/Down: select     Left/Right: switch side     Enter: equip / use / remove     Esc or I: close",
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.5, 0.5, 0.58))
+
+
+# ---------------- spellbook ----------------
+# Row geometry comes from the SPB_* constants shared with
+# _spellbook_click in main.gd.
+func _draw_panel_spellbook() -> void:
+	var w: float = game.SPB_W
+	var h: float = 96.0 + game.SPELL_ORDER.size() * game.SPB_ROW_H
+	var p := _panel(w, h, "Spellbook     (your mana: %d/%d)" % [game.player_mana, game.player_max_mana])
+	for i in game.SPELL_ORDER.size():
+		var id: String = game.SPELL_ORDER[i]
+		var sp: Dictionary = game.SPELLS[id]
+		var ry: float = p.y + game.SPB_TOP + i * game.SPB_ROW_H
+		var row := Rect2(p.x + 8, ry, w - 16.0, game.SPB_ROW_H - 6.0)
+		if i == game.spellbook_index:
+			draw_rect(row, Color(0.22, 0.26, 0.36))
+		if id == game.active_spell:
+			draw_rect(row, Color(0.85, 0.72, 0.20), false, 1.0)
+		game.draw_projectile_icon(self, id, row.position + Vector2(26, row.size.y * 0.5), 0.0, 1.4)
+		var name_text: String = sp["name"] + ("   [active]" if id == game.active_spell else "")
+		draw_string(font, row.position + Vector2(54, 20), name_text,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 15,
+				Color(0.95, 0.88, 0.60) if id == game.active_spell else Color(0.88, 0.88, 0.92))
+		draw_string(font, row.position + Vector2(54, 38),
+				"%d mana, %d damage, range %d - %s" % [sp["mana"], sp["dmg"], sp["range"], sp["desc"]],
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.62, 0.62, 0.68))
+	draw_string(font, Vector2(p.x + 16, p.y + h - 16),
+			"Click a spell (or Up/Down + Enter) to make it the active one. Esc closes.",
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.5, 0.5, 0.58))
+
+
+# ---------------- aiming overlay ----------------
+# While targeting, the OS cursor is hidden: the projectile icon takes
+# its place and the hovered tile is highlighted (gold in range, red out).
+func _draw_targeting() -> void:
+	var vs := get_viewport_rect().size
+	var mp := get_viewport().get_mouse_position()
+	if mp.y < vs.y - BAR_H:
+		var tile: Vector2i = game.screen_to_tile(mp)
+		var topleft: Vector2 = game.camera.get_screen_center_position() - vs * 0.5
+		var spos := Vector2(tile) * float(game.TILE) - topleft
+		var ok: bool = game.target_in_range(tile)
+		draw_rect(Rect2(spos, Vector2(game.TILE, game.TILE)),
+				Color(0.95, 0.85, 0.30, 0.9) if ok else Color(0.90, 0.25, 0.20, 0.9), false, 2.0)
+	var kind: String = "arrow" if game.targeting == "ranged" else game.active_spell
+	game.draw_projectile_icon(self, kind, mp, 0.0, 1.5)
+	var hint := "Click a tile to fire. Esc cancels."
+	var hw: float = font.get_string_size(hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x
+	draw_string(font, Vector2((vs.x - hw) * 0.5 + 1, 25), hint,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0, 0, 0, 0.7))
+	draw_string(font, Vector2((vs.x - hw) * 0.5, 24), hint,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.92, 0.88, 0.72))
 
 
 # ---------------- quest journal ----------------

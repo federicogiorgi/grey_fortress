@@ -1,28 +1,27 @@
 extends Node2D
 # =============================================================
-#  GREY FORTRESS - v6
+#  GREY FORTRESS - v7
 #
 #  New in this version:
-#   - Title screen: the fortress under a crescent moon in a
-#     starry night, with its own epic theme (tools/make_title.py)
-#     and a New Game / Continue / Quit menu
-#   - Save / load: "Save Game" in the options menu writes
-#     user://save.json; "Continue" on the title screen restores it
-#   - Death screen shows when the run started and ended and how
-#     many steps it lasted
-#   - Completing the Sunstone Relic quest awards Leather Armor
-#     (+4 HP, chest) and opens a west gate in town; days of travel
-#     lead to Westmere Village: larger than town, a temple at the
-#     bottom, eight vendors (stubs for now) and a boarded north
-#     gate to a future region (work in progress)
-#   - Goblins are green, as goblins should be
+#   - Ranged attacks: with a ranged weapon equipped, R (or numpad
+#     5) aims, then a click on a tile fires an animated arrow
+#   - Magic: T (or middle mouse) aims the active spell; the
+#     spellbook (P) picks it. Magic Dart (3 mana, kills a rat)
+#     and Fire Boulder (6 mana, kills a goblin) to start with
+#   - While aiming, the cursor becomes the projectile icon and
+#     the hovered tile is highlighted; Esc cancels. Projectiles
+#     fly to the target, rotated to point at it
+#   - The active spell shows in the HUD bar; mana potions are
+#     sold by Cyra; mana refills on level-up and at the altar
+#   - Mobs show a little green HP bar underneath
 #
-#  v5: minimap, mob face icons, rain weather, two-tier vendors,
-#  mob respawning. v4: unique vendors, sell/buyback, victory
-#  screen, clickable HUD, Android removed (Steam only).
+#  v6: title screen + epic theme, save/load, death details,
+#  Westmere Village, Leather Armor reward, green goblins.
+#  v5: minimap, mob icons, rain, two-tier vendors, respawns.
+#  v4: unique vendors, sell/buyback, victory, clickable HUD.
 # =============================================================
 
-enum Mode { TITLE, PLAY, INVENTORY, JOURNAL, SHOP, OPTIONS }
+enum Mode { TITLE, PLAY, INVENTORY, JOURNAL, SHOP, OPTIONS, SPELLBOOK }
 
 const TILE := 32
 const BAR_H := 84                 # must match hud.gd
@@ -73,6 +72,18 @@ const MAP_DEFS := {
 const WORLD_ORDER := ["ruins", "forest", "wilds", "town"]
 const RAIN_CHANCE := 0.10
 
+# ---- magic ------------------------------------------------
+# The active spell is cast with T (or middle mouse), then a click on
+# the target tile. The spellbook (P) picks the active spell.
+const SPELLS := {
+	"dart": { "name": "Magic Dart", "mana": 3, "dmg": 2, "range": 7,
+			"desc": "A dart of pure force. Barely kills a rat." },
+	"boulder": { "name": "Fire Boulder", "mana": 6, "dmg": 3, "range": 6,
+			"desc": "A tumbling mass of flame. Barely kills a goblin." },
+}
+const SPELL_ORDER := ["dart", "boulder"]
+const RANGED_RANGE := 8   # tiles, for ranged weapons
+
 const MOB_TYPES := {
 	"r": { "name": "rat",       "hp": 2,  "dmg": 1, "sight": 10, "xp": 3,
 			"coins": [1, 2],   "color": Color(0.50, 0.42, 0.32) },
@@ -100,6 +111,8 @@ const ITEMS := {
 			"desc": "Restores 8 HP" },
 	"gpotion": { "name": "Greater Potion",  "price": 25, "heal": 18,
 			"desc": "Restores 18 HP" },
+	"mpotion": { "name": "Mana Potion",     "price": 12, "mana_heal": 8,
+			"desc": "Restores 8 mana" },
 	"sword":  { "name": "Iron Sword",       "price": 25, "slot": 16, "dmg": 1,
 			"desc": "+1 damage" },
 	"ssword": { "name": "Steel Sword",      "price": 60, "slot": 16, "dmg": 2,
@@ -135,7 +148,7 @@ const ITEMS := {
 	"boots":  { "name": "Scout's Boots",     "price": 0, "slot": 8,  "hp": 6,
 			"desc": "+6 max HP" },
 	"bow":    { "name": "Hunter's Bow",      "price": 0, "slot": 18, "dmg": 3,
-			"desc": "+3 damage" },
+			"desc": "Ranged attacks (R) for 3 damage" },
 	"legplates": { "name": "Ancient Legplates", "price": 0, "slot": 7, "hp": 9,
 			"desc": "+9 max HP" },
 }
@@ -167,7 +180,7 @@ const VENDORS := [
 	},
 	{
 		"name": "Cyra the alchemist", "short": "Cyra", "symbol": "flask",
-		"stock": ["potion", "gpotion", "charm", "talisman"],
+		"stock": ["potion", "gpotion", "mpotion", "charm", "talisman"],
 		"greet": "Cyra: Potions brewing. Do not rush art.",
 		"quest": { "desc": "Bring me 10 coins", "type": "coins", "need": 10,
 				"intro": "Reagents are expensive. Fund my research with 10 coins?",
@@ -235,6 +248,11 @@ var current_shop := -1
 var shop_index := 0     # keyboard selection inside the shop panel
 var buyback := {}       # vendor set_idx -> [{id, price}] items sold to them
 
+var active_spell := "dart"
+var spellbook_index := 0
+var targeting := ""     # "", "ranged" or "spell": picking a target tile
+var projectile := {}    # in-flight shot: {kind, from, to, t, target, dmg}
+
 var messages := []
 var game_over := false
 var move_count := 0
@@ -252,6 +270,7 @@ var keymap := {
 	"up": KEY_W, "down": KEY_S, "left": KEY_A, "right": KEY_D,
 	"up_left": KEY_Q, "up_right": KEY_E, "down_left": KEY_Z, "down_right": KEY_C,
 	"wait": KEY_SPACE, "character": KEY_I, "journal": KEY_J, "options": KEY_O,
+	"ranged": KEY_R, "spell": KEY_T, "spellbook": KEY_P,
 }
 var options_screen := "main"
 var opt_index := 0
@@ -307,6 +326,8 @@ func _show_title() -> void:
 	title_index = 0
 	game_over = false
 	victory_banner = false
+	projectile = {}
+	_cancel_targeting()
 	_set_rain(false)
 	_play_track("title")
 	_refresh()
@@ -333,6 +354,9 @@ func _start() -> void:
 	victory_moves = 0
 	buyback = {}
 	shop_index = 0
+	active_spell = "dart"
+	projectile = {}
+	_cancel_targeting()
 	mode = Mode.PLAY
 	messages = []
 	map_state = {}
@@ -345,7 +369,7 @@ func _start() -> void:
 		quests.append(q)
 	_load_map("town", "spawn")
 	_log("Welcome to Grey Fortress.")
-	_log("Arrows/WASD move. I character, J journal, O options, Space waits.")
+	_log("Arrows/WASD move. I character, J journal, P spells, R/T aim, O options.")
 	_update_music()
 	_refresh()
 
@@ -368,7 +392,15 @@ func _process(delta: float) -> void:
 		banner_timer -= delta
 		hud.queue_redraw()
 	_weather_tick(delta)
+	if not projectile.is_empty():
+		_advance_projectile(delta)
+		held_dir = Vector2i.ZERO
+		return
 	if game_over or victory_banner or mode != Mode.PLAY:
+		held_dir = Vector2i.ZERO
+		return
+	if targeting != "":
+		hud.queue_redraw()   # the cursor icon and tile highlight follow the mouse
 		held_dir = Vector2i.ZERO
 		return
 	var dir := _polled_dir()
@@ -704,6 +736,14 @@ func _unhandled_input(event: InputEvent) -> void:
 		else:
 			opt_slider_dragging = false
 		return
+	# Middle mouse: start spell targeting; while targeting, it fires too.
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_MIDDLE and event.pressed:
+		if mode == Mode.PLAY and not game_over and not victory_banner and projectile.is_empty():
+			if targeting == "":
+				_begin_targeting("spell")
+			elif targeting == "spell":
+				_try_fire_click(event.position)
+		return
 	if event is InputEventMouseMotion and mode == Mode.OPTIONS and opt_slider_dragging:
 		_options_click(event.position, false)
 		return
@@ -744,6 +784,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			_close_panel()
 		Mode.OPTIONS:
 			_options_input(event.keycode)
+		Mode.SPELLBOOK:
+			_spellbook_input(event.keycode)
 
 # All left-clicks funnel through here. Movement is deliberately NOT
 # mouse-driven: clicks only operate the UI (HUD buttons and panels).
@@ -758,6 +800,9 @@ func _handle_click(mp: Vector2) -> void:
 		victory_banner = false
 		_refresh()
 		return
+	if mode == Mode.PLAY and targeting != "":
+		_try_fire_click(mp)
+		return
 	if _bar_click(mp):
 		return
 	match mode:
@@ -769,16 +814,18 @@ func _handle_click(mp: Vector2) -> void:
 			_close_panel()
 		Mode.OPTIONS:
 			_options_click(mp, true)
+		Mode.SPELLBOOK:
+			_spellbook_click(mp)
 
-# The three HUD buttons. Geometry is shared with hud.gd via
+# The HUD buttons. Geometry is shared with hud.gd via
 # bar_button_rects(), so drawing and hit-testing can never drift apart.
-const BAR_BUTTONS := ["Inventory (I)", "Journal (J)", "Options (O)"]
+const BAR_BUTTONS := ["Inventory (I)", "Journal (J)", "Spells (P)", "Options (O)"]
 
 func bar_button_rects() -> Array:
 	var vs := get_viewport_rect().size
-	var bw := 110.0
+	var bw := 100.0
 	var bh := 26.0
-	var gap := 8.0
+	var gap := 6.0
 	var x := vs.x - (bw + gap) * BAR_BUTTONS.size() - 4.0
 	var y := vs.y - BAR_H + 50.0
 	var rects := []
@@ -788,7 +835,7 @@ func bar_button_rects() -> Array:
 
 func _bar_click(mp: Vector2) -> bool:
 	var rects := bar_button_rects()
-	var targets := [Mode.INVENTORY, Mode.JOURNAL, Mode.OPTIONS]
+	var targets := [Mode.INVENTORY, Mode.JOURNAL, Mode.SPELLBOOK, Mode.OPTIONS]
 	for i in rects.size():
 		if not (rects[i] as Rect2).has_point(mp):
 			continue
@@ -804,6 +851,9 @@ func _bar_click(mp: Vector2) -> bool:
 				ui_index = 0
 			Mode.JOURNAL:
 				mode = Mode.JOURNAL
+			Mode.SPELLBOOK:
+				mode = Mode.SPELLBOOK
+				spellbook_index = SPELL_ORDER.find(active_spell)
 			Mode.OPTIONS:
 				mode = Mode.OPTIONS
 				options_screen = "main"
@@ -819,6 +869,13 @@ func _close_panel() -> void:
 	_refresh()
 
 func _play_input(key: int) -> void:
+	if targeting != "":
+		if key == KEY_ESCAPE or key == keymap["ranged"] or key == keymap["spell"]:
+			_cancel_targeting()
+			_refresh()
+		return
+	if not projectile.is_empty():
+		return   # a shot is in flight; wait for it to land
 	if key == keymap["character"]:
 		mode = Mode.INVENTORY
 		ui_pane = 1
@@ -827,6 +884,14 @@ func _play_input(key: int) -> void:
 	elif key == keymap["journal"]:
 		mode = Mode.JOURNAL
 		_refresh()
+	elif key == keymap["spellbook"]:
+		mode = Mode.SPELLBOOK
+		spellbook_index = SPELL_ORDER.find(active_spell)
+		_refresh()
+	elif key == keymap["ranged"] or key == KEY_KP_5:
+		_begin_targeting("ranged")
+	elif key == keymap["spell"]:
+		_begin_targeting("spell")
 	elif key == keymap["wait"]:
 		_end_turn()
 	elif key == keymap["options"] or key == KEY_ESCAPE:
@@ -889,7 +954,7 @@ func _activate_selection() -> void:
 			var it: Dictionary = ITEMS[id]
 			if it.has("slot"):
 				_equip(id)
-			elif it.has("heal"):
+			elif it.has("heal") or it.has("mana_heal"):
 				_use_item(id)
 			else:
 				_log("The %s cannot be used or equipped." % it["name"])
@@ -1023,6 +1088,163 @@ func _buyback_item(idx: int) -> void:
 
 
 # ---------------------------------------------------------
+#  Ranged attacks and magic. R (or numpad 5) aims the equipped
+#  ranged weapon, T (or middle mouse) aims the active spell; a
+#  click on a tile fires. While aiming, the OS cursor is hidden
+#  and the HUD draws the projectile icon in its place.
+#  For now shots only hit monsters; interacting with the
+#  environment is planned for later.
+# ---------------------------------------------------------
+func _begin_targeting(what: String) -> void:
+	if what == "ranged" and not equipment.has(18):
+		_log("You have no ranged weapon equipped.")
+		_refresh()
+		return
+	if what == "spell":
+		var sp: Dictionary = SPELLS[active_spell]
+		if player_mana < sp["mana"]:
+			_log("Not enough mana. (%s needs %d)" % [sp["name"], sp["mana"]])
+			_refresh()
+			return
+	targeting = what
+	Input.mouse_mode = Input.MOUSE_MODE_HIDDEN
+	_log("Aiming %s. Click a tile; Esc cancels."
+			% ("your " + ITEMS[equipment[18]]["name"] if what == "ranged" else SPELLS[active_spell]["name"]))
+	_refresh()
+
+func _cancel_targeting() -> void:
+	targeting = ""
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+
+# A click while aiming: clicks on the HUD bar are ignored.
+func _try_fire_click(mp: Vector2) -> void:
+	if mp.y >= get_viewport_rect().size.y - BAR_H:
+		return
+	_fire_at(screen_to_tile(mp))
+
+func screen_to_tile(mp: Vector2) -> Vector2i:
+	var topleft := camera.get_screen_center_position() - get_viewport_rect().size * 0.5
+	return Vector2i(((mp + topleft) / TILE).floor())
+
+func targeting_range() -> int:
+	return RANGED_RANGE if targeting == "ranged" else SPELLS[active_spell]["range"]
+
+func target_in_range(tile: Vector2i) -> bool:
+	var d: int = max(abs(tile.x - player_pos.x), abs(tile.y - player_pos.y))
+	return d > 0 and d <= targeting_range() and _in_bounds(tile)
+
+func _fire_at(tile: Vector2i) -> void:
+	if not target_in_range(tile):
+		_log("Out of range.")
+		_refresh()
+		return
+	var kind: String
+	var dmg: int
+	if targeting == "ranged":
+		kind = "arrow"
+		dmg = ITEMS[equipment[18]]["dmg"]
+	else:
+		var sp: Dictionary = SPELLS[active_spell]
+		kind = active_spell
+		dmg = sp["dmg"]
+		player_mana -= sp["mana"]
+	_cancel_targeting()
+	var from := Vector2(player_pos) * TILE + Vector2(TILE, TILE) * 0.5
+	var to := Vector2(tile) * TILE + Vector2(TILE, TILE) * 0.5
+	projectile = {
+		"kind": kind, "from": from, "to": to, "t": 0.0, "target": tile, "dmg": dmg,
+		"dur": max(from.distance_to(to) / 700.0, 0.12),
+	}
+	_refresh()
+
+func _advance_projectile(delta: float) -> void:
+	projectile["t"] += delta / projectile["dur"]
+	queue_redraw()
+	if projectile["t"] < 1.0:
+		return
+	var kind: String = projectile["kind"]
+	var verb: String = {
+		"arrow": "Your arrow strikes", "dart": "The magic dart hits",
+		"boulder": "The fire boulder scorches",
+	}[kind]
+	var noun: String = "arrow" if kind == "arrow" else SPELLS[kind]["name"].to_lower()
+	var mi := _mob_at(projectile["target"])
+	var dmg: int = projectile["dmg"]
+	projectile = {}
+	if mi >= 0:
+		_damage_mob(mi, dmg, verb)
+	else:
+		_log("The %s hits nothing." % noun)
+	_end_turn()
+
+# Draws a projectile icon pointing along +x, rotated by `angle`.
+# Reused for the flying shot, the aiming cursor, the spellbook and
+# the active-spell indicator in the bar.
+func draw_projectile_icon(ci: CanvasItem, kind: String, pos: Vector2, angle: float, s: float = 1.0) -> void:
+	ci.draw_set_transform(pos, angle, Vector2(s, s))
+	match kind:
+		"arrow":
+			ci.draw_line(Vector2(-9, 0), Vector2(6, 0), Color(0.62, 0.44, 0.20), 2.0)
+			ci.draw_colored_polygon(PackedVector2Array([
+				Vector2(11, 0), Vector2(5, -3.5), Vector2(5, 3.5)]), Color(0.80, 0.82, 0.88))
+			ci.draw_line(Vector2(-9, 0), Vector2(-12, -3), Color(0.85, 0.83, 0.75), 1.5)
+			ci.draw_line(Vector2(-9, 0), Vector2(-12, 3), Color(0.85, 0.83, 0.75), 1.5)
+		"dart":
+			ci.draw_circle(Vector2(-8, 0), 2.0, Color(0.45, 0.55, 0.95, 0.35))
+			ci.draw_circle(Vector2(-4, 0), 2.6, Color(0.55, 0.65, 1.0, 0.6))
+			ci.draw_colored_polygon(PackedVector2Array([
+				Vector2(9, 0), Vector2(0, -3), Vector2(-2, 0), Vector2(0, 3)]),
+				Color(0.72, 0.80, 1.0))
+			ci.draw_circle(Vector2(2, 0), 2.2, Color(0.95, 0.97, 1.0))
+		"boulder":
+			ci.draw_circle(Vector2(-9, 0), 3.0, Color(0.95, 0.75, 0.20, 0.45))
+			ci.draw_circle(Vector2(-5, 0), 4.0, Color(0.95, 0.55, 0.15, 0.7))
+			ci.draw_circle(Vector2(2, 0), 6.0, Color(0.45, 0.30, 0.22))
+			ci.draw_circle(Vector2(2, 0), 6.0, Color(0.95, 0.45, 0.10), false, 1.6)
+			ci.draw_circle(Vector2(4, -2), 1.8, Color(0.30, 0.18, 0.14))
+	ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
+# ---------------------------------------------------------
+#  Spellbook (P): pick the active spell.
+# ---------------------------------------------------------
+const SPB_W := 540.0
+const SPB_TOP := 56.0
+const SPB_ROW_H := 54.0
+
+func _spellbook_input(key: int) -> void:
+	if key == KEY_ESCAPE or key == keymap["spellbook"]:
+		_close_panel()
+		return
+	match key:
+		KEY_UP, KEY_W:
+			spellbook_index = max(spellbook_index - 1, 0)
+			_refresh()
+		KEY_DOWN, KEY_S:
+			spellbook_index = min(spellbook_index + 1, SPELL_ORDER.size() - 1)
+			_refresh()
+		KEY_ENTER, KEY_KP_ENTER:
+			_set_active_spell(SPELL_ORDER[spellbook_index])
+
+# Geometry mirrors _draw_panel_spellbook in hud.gd via the SPB_* consts.
+func _spellbook_click(mp: Vector2) -> void:
+	var vs := get_viewport_rect().size
+	var h := 96.0 + SPELL_ORDER.size() * SPB_ROW_H
+	var px := (vs.x - SPB_W) * 0.5
+	var py := (vs.y - BAR_H - h) * 0.5
+	for i in SPELL_ORDER.size():
+		if Rect2(px + 8, py + SPB_TOP + i * SPB_ROW_H, SPB_W - 16.0, SPB_ROW_H - 6.0).has_point(mp):
+			spellbook_index = i
+			_set_active_spell(SPELL_ORDER[i])
+			return
+
+func _set_active_spell(id: String) -> void:
+	active_spell = id
+	_log("Active spell: %s. Cast it with T or the middle mouse button." % SPELLS[id]["name"])
+	_refresh()
+
+
+# ---------------------------------------------------------
 #  Player turn
 # ---------------------------------------------------------
 func _try_player_move(dir: Vector2i) -> void:
@@ -1054,9 +1276,12 @@ func _try_player_move(dir: Vector2i) -> void:
 	_end_turn()
 
 func _attack_mob(index: int) -> void:
+	_damage_mob(index, player_dmg, "You hit")
+
+func _damage_mob(index: int, dmg: int, verb: String) -> void:
 	var mob = mobs[index]
 	var t: Dictionary = MOB_TYPES[mob["type"]]
-	mob["hp"] -= player_dmg
+	mob["hp"] -= dmg
 	if mob["hp"] <= 0:
 		mobs.remove_at(index)
 		var drop := randi_range(t["coins"][0], t["coins"][1])
@@ -1065,7 +1290,7 @@ func _attack_mob(index: int) -> void:
 		_count_kill(mob["type"])
 		_gain_xp(t["xp"])
 	else:
-		_log("You hit the %s for %d. (%d HP left)" % [t["name"], player_dmg, mob["hp"]])
+		_log("%s the %s for %d. (%d HP left)" % [verb, t["name"], dmg, mob["hp"]])
 
 func _pray() -> void:
 	if player_hp < player_max_hp or player_mana < player_max_mana:
@@ -1231,17 +1456,22 @@ func _buy_item(id: String) -> void:
 
 func _use_item(id: String) -> void:
 	var item: Dictionary = ITEMS[id]
-	if not item.has("heal"):
+	if item.has("heal"):
+		if player_hp >= player_max_hp:
+			_log("You are already at full health.")
+		else:
+			_remove_item(id)
+			player_hp = min(player_hp + item["heal"], player_max_hp)
+			_log("You use the %s. (+%d HP, now %d/%d)" % [item["name"], item["heal"], player_hp, player_max_hp])
+	elif item.has("mana_heal"):
+		if player_mana >= player_max_mana:
+			_log("Your mana is already full.")
+		else:
+			_remove_item(id)
+			player_mana = min(player_mana + item["mana_heal"], player_max_mana)
+			_log("You drink the %s. (+%d mana, now %d/%d)" % [item["name"], item["mana_heal"], player_mana, player_max_mana])
+	else:
 		_log("The %s cannot be used." % item["name"])
-		_refresh()
-		return
-	if player_hp >= player_max_hp:
-		_log("You are already at full health.")
-		_refresh()
-		return
-	_remove_item(id)
-	player_hp = min(player_hp + item["heal"], player_max_hp)
-	_log("You use the %s. (+%d HP, now %d/%d)" % [item["name"], item["heal"], player_hp, player_max_hp])
 	_refresh()
 
 func inventory_list() -> Array:
@@ -1276,7 +1506,8 @@ func _recalc_stats() -> void:
 	var bonus_mana := 0
 	for slot in equipment:
 		var it: Dictionary = ITEMS[equipment[slot]]
-		player_dmg += it.get("dmg", 0)
+		if slot != 18:   # the ranged weapon's damage is for R attacks only
+			player_dmg += it.get("dmg", 0)
 		bonus_hp += it.get("hp", 0)
 		bonus_mana += it.get("mana", 0)
 	player_max_hp = base_max_hp + bonus_hp
@@ -1422,6 +1653,7 @@ func _save_game() -> void:
 		"quests": qs, "buyback": buyback,
 		"current_map": current_map, "px": player_pos.x, "py": player_pos.y,
 		"move_count": move_count, "run_start_text": run_start_text,
+		"active_spell": active_spell,
 		"visited": visited.keys(), "maps": maps,
 	}
 	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
@@ -1447,6 +1679,7 @@ func _load_game() -> void:
 	coins = int(data["coins"])
 	move_count = int(data["move_count"])
 	run_start_text = data["run_start_text"]
+	active_spell = data.get("active_spell", "dart")
 	inventory = {}
 	for id in data["inventory"]:
 		inventory[id] = int(data["inventory"][id])
@@ -1498,10 +1731,12 @@ func _load_game() -> void:
 const OPT_MAIN := ["Graphics", "Sound", "Keybinds", "Save Game", "Back"]
 const REBIND_ACTIONS := ["up", "down", "left", "right",
 		"up_left", "up_right", "down_left", "down_right",
-		"wait", "character", "journal", "options"]
+		"wait", "character", "journal", "options",
+		"ranged", "spell", "spellbook"]
 const REBIND_LABELS := ["Move up", "Move down", "Move left", "Move right",
 		"Move up-left", "Move up-right", "Move down-left", "Move down-right",
-		"Wait", "Character sheet", "Quest journal", "Options menu"]
+		"Wait", "Character sheet", "Quest journal", "Options menu",
+		"Ranged attack", "Cast spell", "Spellbook"]
 
 func _options_input(key: int) -> void:
 	if opt_rebinding:
@@ -1861,6 +2096,10 @@ func _draw() -> void:
 		if view.has_point(mob["pos"]):
 			_draw_mob(mob)
 	_draw_player()
+	if not projectile.is_empty():
+		var p: Vector2 = projectile["from"].lerp(projectile["to"], clampf(projectile["t"], 0.0, 1.0))
+		var ang: float = (projectile["to"] - projectile["from"]).angle()
+		draw_projectile_icon(self, projectile["kind"], p, ang, 1.2)
 
 func _draw_tile(x: int, y: int) -> void:
 	var c: String = grid[y][x]
@@ -1978,10 +2217,11 @@ func _draw_mob(mob: Dictionary) -> void:
 	draw_circle(center, 11.0, t["color"])
 	draw_circle(center, 11.0, Color(0, 0, 0, 0.5), false, 2.0)
 	_draw_mob_icon(center, mob["type"], t["color"])
-	var maxhp: int = MOB_TYPES[mob["type"]]["hp"]
-	var frac: float = float(mob["hp"]) / float(maxhp)
-	draw_rect(Rect2(center + Vector2(-10, -17), Vector2(20, 3)), Color(0.2, 0.05, 0.05))
-	draw_rect(Rect2(center + Vector2(-10, -17), Vector2(20.0 * frac, 3)), Color(0.9, 0.25, 0.2))
+	# little green health bar under the mob
+	var frac: float = float(mob["hp"]) / float(t["hp"])
+	draw_rect(Rect2(center + Vector2(-10, 13), Vector2(20, 3)), Color(0.05, 0.14, 0.05))
+	draw_rect(Rect2(center + Vector2(-10, 13), Vector2(20.0 * frac, 3)), Color(0.30, 0.85, 0.30))
+	draw_rect(Rect2(center + Vector2(-10, 13), Vector2(20, 3)), Color(0, 0, 0, 0.5), false, 1.0)
 
 # A small face icon per mob type, drawn on the colored disc.
 func _draw_mob_icon(c: Vector2, type: String, base: Color) -> void:
