@@ -31,7 +31,7 @@ func _draw() -> void:
 			_draw_panel_options()
 		game.Mode.SPELLBOOK:
 			_draw_panel_spellbook()
-	if game.mode == game.Mode.PLAY and game.targeting != "":
+	if game.mode == game.Mode.PLAY and game.targeting:
 		_draw_targeting()
 	if game.banner_timer > 0.0:
 		_draw_banner()
@@ -204,7 +204,7 @@ func _draw_bar() -> void:
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.78, 0.78, 0.80))
 		line += 1
 
-	# The active spell, castable with T or the middle mouse button.
+	# The active spell, castable with 5 or the middle mouse button.
 	var sp: Dictionary = game.SPELLS[game.active_spell]
 	var spell_x := vs.x - 428.0
 	draw_rect(Rect2(spell_x, y + 10, 26, 26), Color(0.13, 0.13, 0.18))
@@ -212,7 +212,7 @@ func _draw_bar() -> void:
 	game.draw_projectile_icon(self, game.active_spell, Vector2(spell_x + 13, y + 23), 0.0, 1.0)
 	draw_string(font, Vector2(spell_x + 34, y + 22), sp["name"],
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.82, 0.82, 0.90))
-	draw_string(font, Vector2(spell_x + 34, y + 37), "%d mana - T casts" % sp["mana"],
+	draw_string(font, Vector2(spell_x + 34, y + 37), "%d mana - 5 casts" % sp["mana"],
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.55, 0.55, 0.62))
 
 	# Clickable panel buttons (movement itself stays keyboard-only).
@@ -461,9 +461,8 @@ func _draw_targeting() -> void:
 		var ok: bool = game.target_in_range(tile)
 		draw_rect(Rect2(spos, Vector2(game.TILE, game.TILE)),
 				Color(0.95, 0.85, 0.30, 0.9) if ok else Color(0.90, 0.25, 0.20, 0.9), false, 2.0)
-	var kind: String = "arrow" if game.targeting == "ranged" else game.active_spell
-	game.draw_projectile_icon(self, kind, mp, 0.0, 1.5)
-	var hint := "Click a tile to fire. Esc cancels."
+	game.draw_projectile_icon(self, game.active_spell, mp, 0.0, 1.5)
+	var hint := "Click a tile to cast. Esc or right click cancels."
 	var hw: float = font.get_string_size(hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x
 	draw_string(font, Vector2((vs.x - hw) * 0.5 + 1, 25), hint,
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0, 0, 0, 0.7))
@@ -633,22 +632,29 @@ func _draw_panel_options() -> void:
 			draw_string(font, Vector2(p.x + 16, p.y + 144), "Left/Right adjust, or click/drag the bar. Esc goes back.",
 					HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.5, 0.5, 0.58))
 		"keybinds":
+			# Every action has two keybind cells; cell geometry must
+			# mirror the "keybinds" branch of _options_click in main.gd.
 			var h: float = 110.0 + game.REBIND_ACTIONS.size() * 26.0
-			var p := _panel(460.0, h, "Options - Keybinds")
+			var p := _panel(560.0, h, "Options - Keybinds")
 			for i in game.REBIND_ACTIONS.size():
 				var yy: float = p.y + 62 + i * 26
 				if game.opt_index == i:
-					draw_rect(Rect2(p.x + 8, yy - 17, 444, 24), Color(0.22, 0.26, 0.36))
+					draw_rect(Rect2(p.x + 8, yy - 17, 544, 24), Color(0.16, 0.18, 0.24))
 				draw_string(font, Vector2(p.x + 20, yy), game.REBIND_LABELS[i],
 						HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.75, 0.75, 0.8))
-				var keyname := "..."
-				if not (game.opt_rebinding and game.opt_index == i):
-					keyname = OS.get_keycode_string(game.keymap[game.REBIND_ACTIONS[i]])
-				else:
-					keyname = "press a key..."
-				draw_string(font, Vector2(p.x + 280, yy), keyname,
-						HORIZONTAL_ALIGNMENT_LEFT, -1, 14,
-						Color(0.95, 0.85, 0.5) if (game.opt_rebinding and game.opt_index == i) else Color(0.88, 0.88, 0.9))
+				for slot in 2:
+					var cell := Rect2(p.x + 240 + slot * 156, yy - 17, 148, 24)
+					var editing: bool = game.opt_rebinding and game.opt_index == i and game.opt_bind_slot == slot
+					var selected: bool = game.opt_index == i and game.opt_bind_slot == slot
+					if selected:
+						draw_rect(cell, Color(0.22, 0.26, 0.36))
+					draw_rect(cell, Color(0.55, 0.55, 0.62) if selected else Color(0.30, 0.30, 0.36), false, 1.0)
+					var k: int = game.keymap[game.REBIND_ACTIONS[i]][slot]
+					var keyname := "press a key..." if editing \
+							else ("-" if k == KEY_NONE else OS.get_keycode_string(k))
+					draw_string(font, cell.position + Vector2(10, 17), keyname,
+							HORIZONTAL_ALIGNMENT_LEFT, -1, 13,
+							Color(0.95, 0.85, 0.5) if editing else Color(0.88, 0.88, 0.9))
 			draw_string(font, Vector2(p.x + 16, p.y + h - 16),
-					"Up/Down select, Enter rebind, or click/tap a row. Esc goes back.",
+					"Up/Down row, Left/Right slot, Enter rebind - or click a cell. Esc goes back.",
 					HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.5, 0.5, 0.58))

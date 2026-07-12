@@ -3,14 +3,17 @@ extends Node2D
 #  GREY FORTRESS - v7
 #
 #  New in this version:
-#   - Ranged attacks: with a ranged weapon equipped, R (or numpad
-#     5) aims, then a click on a tile fires an animated arrow
-#   - Magic: T (or middle mouse) aims the active spell; the
-#     spellbook (P) picks it. Magic Dart (3 mana, kills a rat)
-#     and Fire Boulder (6 mana, kills a goblin) to start with
-#   - While aiming, the cursor becomes the projectile icon and
-#     the hovered tile is highlighted; Esc cancels. Projectiles
-#     fly to the target, rotated to point at it
+#   - Magic: 5 (or middle mouse) aims the active spell; the
+#     spellbook (P) picks it. Three spells: Magic Dart (3 mana,
+#     2 dmg, range 7), Bone Arrow (5 mana, 3 dmg, range 9) and
+#     Fire Boulder (7 mana, 5 dmg, range 5)
+#   - While aiming, the cursor becomes the spell icon and the
+#     hovered tile is highlighted; Esc or right click cancels.
+#     Projectiles fly to the target, rotated to point at it
+#   - Ranged weapons were cut: combat magic replaces them, and
+#     the Hunter's Belt replaces the Hunter's Bow outpost loot
+#   - Every action can have two keybinds (numpad defaults ride
+#     along: e.g. move up is W and numpad 8, cast is 5 and KP5)
 #   - The active spell shows in the HUD bar; mana potions are
 #     sold by Cyra; mana refills on level-up and at the altar
 #   - Mobs show a little green HP bar underneath
@@ -49,7 +52,7 @@ const MAP_DEFS := {
 		"w": 125, "h": 94,
 		"tree_density": 0.100, "water_blobs": 2,
 		"mobs": { "w": 9, "g": 8, "b": 6 },
-		"outpost": { "x": 88, "y": 50, "item": "bow" },
+		"outpost": { "x": 88, "y": 50, "item": "belt" },
 	},
 	"ruins": {
 		"name": "Ancient Ruins", "south": "forest", "music": "ruins",
@@ -73,16 +76,17 @@ const WORLD_ORDER := ["ruins", "forest", "wilds", "town"]
 const RAIN_CHANCE := 0.10
 
 # ---- magic ------------------------------------------------
-# The active spell is cast with T (or middle mouse), then a click on
+# The active spell is cast with 5 (or middle mouse), then a click on
 # the target tile. The spellbook (P) picks the active spell.
 const SPELLS := {
 	"dart": { "name": "Magic Dart", "mana": 3, "dmg": 2, "range": 7,
 			"desc": "A dart of pure force. Barely kills a rat." },
-	"boulder": { "name": "Fire Boulder", "mana": 6, "dmg": 3, "range": 6,
-			"desc": "A tumbling mass of flame. Barely kills a goblin." },
+	"arrow": { "name": "Bone Arrow", "mana": 5, "dmg": 3, "range": 9,
+			"desc": "A whistling shaft of bone. Kills a goblin outright." },
+	"boulder": { "name": "Fire Boulder", "mana": 7, "dmg": 5, "range": 5,
+			"desc": "A tumbling mass of flame. Fells a wild boar." },
 }
-const SPELL_ORDER := ["dart", "boulder"]
-const RANGED_RANGE := 8   # tiles, for ranged weapons
+const SPELL_ORDER := ["dart", "arrow", "boulder"]
 
 const MOB_TYPES := {
 	"r": { "name": "rat",       "hp": 2,  "dmg": 1, "sight": 10, "xp": 3,
@@ -147,8 +151,8 @@ const ITEMS := {
 			"desc": "+4 max HP" },
 	"boots":  { "name": "Scout's Boots",     "price": 0, "slot": 8,  "hp": 6,
 			"desc": "+6 max HP" },
-	"bow":    { "name": "Hunter's Bow",      "price": 0, "slot": 18, "dmg": 3,
-			"desc": "Ranged attacks (R) for 3 damage" },
+	"belt":   { "name": "Hunter's Belt",     "price": 0, "slot": 6,  "hp": 8,
+			"desc": "+8 max HP" },
 	"legplates": { "name": "Ancient Legplates", "price": 0, "slot": 7, "hp": 9,
 			"desc": "+9 max HP" },
 }
@@ -250,7 +254,7 @@ var buyback := {}       # vendor set_idx -> [{id, price}] items sold to them
 
 var active_spell := "dart"
 var spellbook_index := 0
-var targeting := ""     # "", "ranged" or "spell": picking a target tile
+var targeting := false  # aiming the active spell at a tile
 var projectile := {}    # in-flight shot: {kind, from, to, t, target, dmg}
 
 var messages := []
@@ -266,15 +270,30 @@ var move_timer := 0.0
 
 var ui_pane := 1          # inventory screen: 0 = equipment, 1 = backpack
 var ui_index := 0
+# Every action has up to two keybinds (KEY_NONE = unbound). Arrow keys
+# are additional hardwired movement keys on top of these.
 var keymap := {
-	"up": KEY_W, "down": KEY_S, "left": KEY_A, "right": KEY_D,
-	"up_left": KEY_Q, "up_right": KEY_E, "down_left": KEY_Z, "down_right": KEY_C,
-	"wait": KEY_SPACE, "character": KEY_I, "journal": KEY_J, "options": KEY_O,
-	"ranged": KEY_R, "spell": KEY_T, "spellbook": KEY_P,
+	"up": [KEY_W, KEY_KP_8], "down": [KEY_S, KEY_KP_2],
+	"left": [KEY_A, KEY_KP_4], "right": [KEY_D, KEY_KP_6],
+	"up_left": [KEY_Q, KEY_KP_7], "up_right": [KEY_E, KEY_KP_9],
+	"down_left": [KEY_Z, KEY_KP_1], "down_right": [KEY_C, KEY_KP_3],
+	"wait": [KEY_SPACE, KEY_NONE], "character": [KEY_I, KEY_NONE],
+	"journal": [KEY_J, KEY_NONE], "options": [KEY_O, KEY_NONE],
+	"spell": [KEY_5, KEY_KP_5], "spellbook": [KEY_P, KEY_NONE],
 }
+
+func key_is(action: String, key: int) -> bool:
+	return key != KEY_NONE and key in keymap[action]
+
+func _action_down(action: String) -> bool:
+	for k in keymap[action]:
+		if k != KEY_NONE and Input.is_key_pressed(k):
+			return true
+	return false
 var options_screen := "main"
 var opt_index := 0
 var opt_rebinding := false
+var opt_bind_slot := 0    # which of the two keybind slots is being edited
 var opt_slider_dragging := false
 var master_volume := 1.0
 var visited := {}         # maps the player has entered at least once
@@ -369,7 +388,7 @@ func _start() -> void:
 		quests.append(q)
 	_load_map("town", "spawn")
 	_log("Welcome to Grey Fortress.")
-	_log("Arrows/WASD move. I character, J journal, P spells, R/T aim, O options.")
+	_log("Arrows/WASD move. I character, J journal, P spells, 5 casts, O options.")
 	_update_music()
 	_refresh()
 
@@ -399,7 +418,7 @@ func _process(delta: float) -> void:
 	if game_over or victory_banner or mode != Mode.PLAY:
 		held_dir = Vector2i.ZERO
 		return
-	if targeting != "":
+	if targeting:
 		hud.queue_redraw()   # the cursor icon and tile highlight follow the mouse
 		held_dir = Vector2i.ZERO
 		return
@@ -420,25 +439,25 @@ func _process(delta: float) -> void:
 func _polled_dir() -> Vector2i:
 	var dx := 0
 	var dy := 0
-	if Input.is_key_pressed(KEY_UP) or Input.is_key_pressed(keymap["up"]) or Input.is_key_pressed(KEY_KP_8):
+	if Input.is_key_pressed(KEY_UP) or _action_down("up"):
 		dy -= 1
-	if Input.is_key_pressed(KEY_DOWN) or Input.is_key_pressed(keymap["down"]) or Input.is_key_pressed(KEY_KP_2):
+	if Input.is_key_pressed(KEY_DOWN) or _action_down("down"):
 		dy += 1
-	if Input.is_key_pressed(KEY_LEFT) or Input.is_key_pressed(keymap["left"]) or Input.is_key_pressed(KEY_KP_4):
+	if Input.is_key_pressed(KEY_LEFT) or _action_down("left"):
 		dx -= 1
-	if Input.is_key_pressed(KEY_RIGHT) or Input.is_key_pressed(keymap["right"]) or Input.is_key_pressed(KEY_KP_6):
+	if Input.is_key_pressed(KEY_RIGHT) or _action_down("right"):
 		dx += 1
 	# Dedicated diagonal keys win over anything else.
-	if Input.is_key_pressed(keymap["up_left"]) or Input.is_key_pressed(KEY_KP_7):
+	if _action_down("up_left"):
 		dx = -1
 		dy = -1
-	elif Input.is_key_pressed(keymap["up_right"]) or Input.is_key_pressed(KEY_KP_9):
+	elif _action_down("up_right"):
 		dx = 1
 		dy = -1
-	elif Input.is_key_pressed(keymap["down_left"]) or Input.is_key_pressed(KEY_KP_1):
+	elif _action_down("down_left"):
 		dx = -1
 		dy = 1
-	elif Input.is_key_pressed(keymap["down_right"]) or Input.is_key_pressed(KEY_KP_3):
+	elif _action_down("down_right"):
 		dx = 1
 		dy = 1
 	return Vector2i(dx, dy)
@@ -736,13 +755,19 @@ func _unhandled_input(event: InputEvent) -> void:
 		else:
 			opt_slider_dragging = false
 		return
-	# Middle mouse: start spell targeting; while targeting, it fires too.
+	# Middle mouse: start aiming the active spell; while aiming, it fires too.
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_MIDDLE and event.pressed:
 		if mode == Mode.PLAY and not game_over and not victory_banner and projectile.is_empty():
-			if targeting == "":
-				_begin_targeting("spell")
-			elif targeting == "spell":
+			if targeting:
 				_try_fire_click(event.position)
+			else:
+				_begin_targeting()
+		return
+	# Right mouse cancels aiming, like Esc.
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
+		if targeting:
+			_cancel_targeting()
+			_refresh()
 		return
 	if event is InputEventMouseMotion and mode == Mode.OPTIONS and opt_slider_dragging:
 		_options_click(event.position, false)
@@ -800,7 +825,7 @@ func _handle_click(mp: Vector2) -> void:
 		victory_banner = false
 		_refresh()
 		return
-	if mode == Mode.PLAY and targeting != "":
+	if mode == Mode.PLAY and targeting:
 		_try_fire_click(mp)
 		return
 	if _bar_click(mp):
@@ -869,32 +894,30 @@ func _close_panel() -> void:
 	_refresh()
 
 func _play_input(key: int) -> void:
-	if targeting != "":
-		if key == KEY_ESCAPE or key == keymap["ranged"] or key == keymap["spell"]:
+	if targeting:
+		if key == KEY_ESCAPE or key_is("spell", key):
 			_cancel_targeting()
 			_refresh()
 		return
 	if not projectile.is_empty():
 		return   # a shot is in flight; wait for it to land
-	if key == keymap["character"]:
+	if key_is("character", key):
 		mode = Mode.INVENTORY
 		ui_pane = 1
 		ui_index = 0
 		_refresh()
-	elif key == keymap["journal"]:
+	elif key_is("journal", key):
 		mode = Mode.JOURNAL
 		_refresh()
-	elif key == keymap["spellbook"]:
+	elif key_is("spellbook", key):
 		mode = Mode.SPELLBOOK
 		spellbook_index = SPELL_ORDER.find(active_spell)
 		_refresh()
-	elif key == keymap["ranged"] or key == KEY_KP_5:
-		_begin_targeting("ranged")
-	elif key == keymap["spell"]:
-		_begin_targeting("spell")
-	elif key == keymap["wait"]:
+	elif key_is("spell", key):
+		_begin_targeting()
+	elif key_is("wait", key):
 		_end_turn()
-	elif key == keymap["options"] or key == KEY_ESCAPE:
+	elif key_is("options", key) or key == KEY_ESCAPE:
 		mode = Mode.OPTIONS
 		options_screen = "main"
 		opt_index = 0
@@ -1088,32 +1111,25 @@ func _buyback_item(idx: int) -> void:
 
 
 # ---------------------------------------------------------
-#  Ranged attacks and magic. R (or numpad 5) aims the equipped
-#  ranged weapon, T (or middle mouse) aims the active spell; a
-#  click on a tile fires. While aiming, the OS cursor is hidden
-#  and the HUD draws the projectile icon in its place.
-#  For now shots only hit monsters; interacting with the
-#  environment is planned for later.
+#  Magic. 5 (or middle mouse) aims the active spell; a click on
+#  a tile casts it. While aiming, the OS cursor is hidden and
+#  the HUD draws the spell icon in its place; Esc or right
+#  click cancels. For now spells only hit monsters; interacting
+#  with the environment is planned for later.
 # ---------------------------------------------------------
-func _begin_targeting(what: String) -> void:
-	if what == "ranged" and not equipment.has(18):
-		_log("You have no ranged weapon equipped.")
+func _begin_targeting() -> void:
+	var sp: Dictionary = SPELLS[active_spell]
+	if player_mana < sp["mana"]:
+		_log("Not enough mana. (%s needs %d)" % [sp["name"], sp["mana"]])
 		_refresh()
 		return
-	if what == "spell":
-		var sp: Dictionary = SPELLS[active_spell]
-		if player_mana < sp["mana"]:
-			_log("Not enough mana. (%s needs %d)" % [sp["name"], sp["mana"]])
-			_refresh()
-			return
-	targeting = what
+	targeting = true
 	Input.mouse_mode = Input.MOUSE_MODE_HIDDEN
-	_log("Aiming %s. Click a tile; Esc cancels."
-			% ("your " + ITEMS[equipment[18]]["name"] if what == "ranged" else SPELLS[active_spell]["name"]))
+	_log("Aiming %s. Click a tile; Esc or right click cancels." % sp["name"])
 	_refresh()
 
 func _cancel_targeting() -> void:
-	targeting = ""
+	targeting = false
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 # A click while aiming: clicks on the HUD bar are ignored.
@@ -1126,28 +1142,19 @@ func screen_to_tile(mp: Vector2) -> Vector2i:
 	var topleft := camera.get_screen_center_position() - get_viewport_rect().size * 0.5
 	return Vector2i(((mp + topleft) / TILE).floor())
 
-func targeting_range() -> int:
-	return RANGED_RANGE if targeting == "ranged" else SPELLS[active_spell]["range"]
-
 func target_in_range(tile: Vector2i) -> bool:
 	var d: int = max(abs(tile.x - player_pos.x), abs(tile.y - player_pos.y))
-	return d > 0 and d <= targeting_range() and _in_bounds(tile)
+	return d > 0 and d <= SPELLS[active_spell]["range"] and _in_bounds(tile)
 
 func _fire_at(tile: Vector2i) -> void:
 	if not target_in_range(tile):
 		_log("Out of range.")
 		_refresh()
 		return
-	var kind: String
-	var dmg: int
-	if targeting == "ranged":
-		kind = "arrow"
-		dmg = ITEMS[equipment[18]]["dmg"]
-	else:
-		var sp: Dictionary = SPELLS[active_spell]
-		kind = active_spell
-		dmg = sp["dmg"]
-		player_mana -= sp["mana"]
+	var sp: Dictionary = SPELLS[active_spell]
+	var kind := active_spell
+	var dmg: int = sp["dmg"]
+	player_mana -= sp["mana"]
 	_cancel_targeting()
 	var from := Vector2(player_pos) * TILE + Vector2(TILE, TILE) * 0.5
 	var to := Vector2(tile) * TILE + Vector2(TILE, TILE) * 0.5
@@ -1164,10 +1171,10 @@ func _advance_projectile(delta: float) -> void:
 		return
 	var kind: String = projectile["kind"]
 	var verb: String = {
-		"arrow": "Your arrow strikes", "dart": "The magic dart hits",
+		"dart": "The magic dart hits", "arrow": "The bone arrow pierces",
 		"boulder": "The fire boulder scorches",
 	}[kind]
-	var noun: String = "arrow" if kind == "arrow" else SPELLS[kind]["name"].to_lower()
+	var noun: String = SPELLS[kind]["name"].to_lower()
 	var mi := _mob_at(projectile["target"])
 	var dmg: int = projectile["dmg"]
 	projectile = {}
@@ -1183,12 +1190,12 @@ func _advance_projectile(delta: float) -> void:
 func draw_projectile_icon(ci: CanvasItem, kind: String, pos: Vector2, angle: float, s: float = 1.0) -> void:
 	ci.draw_set_transform(pos, angle, Vector2(s, s))
 	match kind:
-		"arrow":
-			ci.draw_line(Vector2(-9, 0), Vector2(6, 0), Color(0.62, 0.44, 0.20), 2.0)
+		"arrow":   # bone arrow: a pale shaft with a bone-white head
+			ci.draw_line(Vector2(-9, 0), Vector2(6, 0), Color(0.88, 0.86, 0.74), 2.0)
 			ci.draw_colored_polygon(PackedVector2Array([
-				Vector2(11, 0), Vector2(5, -3.5), Vector2(5, 3.5)]), Color(0.80, 0.82, 0.88))
-			ci.draw_line(Vector2(-9, 0), Vector2(-12, -3), Color(0.85, 0.83, 0.75), 1.5)
-			ci.draw_line(Vector2(-9, 0), Vector2(-12, 3), Color(0.85, 0.83, 0.75), 1.5)
+				Vector2(11, 0), Vector2(5, -3.5), Vector2(5, 3.5)]), Color(0.96, 0.95, 0.88))
+			ci.draw_line(Vector2(-9, 0), Vector2(-12, -3), Color(0.70, 0.68, 0.58), 1.5)
+			ci.draw_line(Vector2(-9, 0), Vector2(-12, 3), Color(0.70, 0.68, 0.58), 1.5)
 		"dart":
 			ci.draw_circle(Vector2(-8, 0), 2.0, Color(0.45, 0.55, 0.95, 0.35))
 			ci.draw_circle(Vector2(-4, 0), 2.6, Color(0.55, 0.65, 1.0, 0.6))
@@ -1213,7 +1220,7 @@ const SPB_TOP := 56.0
 const SPB_ROW_H := 54.0
 
 func _spellbook_input(key: int) -> void:
-	if key == KEY_ESCAPE or key == keymap["spellbook"]:
+	if key == KEY_ESCAPE or key_is("spellbook", key):
 		_close_panel()
 		return
 	match key:
@@ -1240,7 +1247,7 @@ func _spellbook_click(mp: Vector2) -> void:
 
 func _set_active_spell(id: String) -> void:
 	active_spell = id
-	_log("Active spell: %s. Cast it with T or the middle mouse button." % SPELLS[id]["name"])
+	_log("Active spell: %s. Cast it with 5 or the middle mouse button." % SPELLS[id]["name"])
 	_refresh()
 
 
@@ -1506,8 +1513,7 @@ func _recalc_stats() -> void:
 	var bonus_mana := 0
 	for slot in equipment:
 		var it: Dictionary = ITEMS[equipment[slot]]
-		if slot != 18:   # the ranged weapon's damage is for R attacks only
-			player_dmg += it.get("dmg", 0)
+		player_dmg += it.get("dmg", 0)
 		bonus_hp += it.get("hp", 0)
 		bonus_mana += it.get("mana", 0)
 	player_max_hp = base_max_hp + bonus_hp
@@ -1680,12 +1686,16 @@ func _load_game() -> void:
 	move_count = int(data["move_count"])
 	run_start_text = data["run_start_text"]
 	active_spell = data.get("active_spell", "dart")
+	# Unknown item ids (e.g. from saves made before an item was
+	# removed from the game) are silently dropped.
 	inventory = {}
 	for id in data["inventory"]:
-		inventory[id] = int(data["inventory"][id])
+		if ITEMS.has(id):
+			inventory[id] = int(data["inventory"][id])
 	equipment = {}
 	for slot in data["equipment"]:
-		equipment[int(slot)] = data["equipment"][slot]
+		if ITEMS.has(data["equipment"][slot]):
+			equipment[int(slot)] = data["equipment"][slot]
 	for i in mini(quests.size(), data["quests"].size()):
 		quests[i]["state"] = data["quests"][i]["state"]
 		quests[i]["progress"] = int(data["quests"][i]["progress"])
@@ -1693,7 +1703,8 @@ func _load_game() -> void:
 	for key in data["buyback"]:
 		var bb := []
 		for e in data["buyback"][key]:
-			bb.append({ "id": e["id"], "price": int(e["price"]) })
+			if ITEMS.has(e["id"]):
+				bb.append({ "id": e["id"], "price": int(e["price"]) })
 		buyback[int(key)] = bb
 	visited = {}
 	for id in data["visited"]:
@@ -1709,7 +1720,8 @@ func _load_game() -> void:
 		st["mobs"] = ms
 		var its := []
 		for it in data["maps"][id]["items"]:
-			its.append({ "pos": Vector2i(int(it["x"]), int(it["y"])), "id": it["id"] })
+			if ITEMS.has(it["id"]):
+				its.append({ "pos": Vector2i(int(it["x"]), int(it["y"])), "id": it["id"] })
 		st["items"] = its
 	for q in quests:
 		if q["state"] == "done" and q.get("opens_west", false):
@@ -1732,16 +1744,16 @@ const OPT_MAIN := ["Graphics", "Sound", "Keybinds", "Save Game", "Back"]
 const REBIND_ACTIONS := ["up", "down", "left", "right",
 		"up_left", "up_right", "down_left", "down_right",
 		"wait", "character", "journal", "options",
-		"ranged", "spell", "spellbook"]
+		"spell", "spellbook"]
 const REBIND_LABELS := ["Move up", "Move down", "Move left", "Move right",
 		"Move up-left", "Move up-right", "Move down-left", "Move down-right",
 		"Wait", "Character sheet", "Quest journal", "Options menu",
-		"Ranged attack", "Cast spell", "Spellbook"]
+		"Cast spell", "Spellbook"]
 
 func _options_input(key: int) -> void:
 	if opt_rebinding:
 		if key != KEY_ESCAPE:
-			keymap[REBIND_ACTIONS[opt_index]] = key
+			keymap[REBIND_ACTIONS[opt_index]][opt_bind_slot] = key
 			_save_settings()
 		opt_rebinding = false
 		_refresh()
@@ -1795,6 +1807,8 @@ func _options_input(key: int) -> void:
 				opt_index = max(opt_index - 1, 0)
 			elif key == KEY_DOWN:
 				opt_index = min(opt_index + 1, REBIND_ACTIONS.size() - 1)
+			elif key == KEY_LEFT or key == KEY_RIGHT:
+				opt_bind_slot = 1 - opt_bind_slot
 			elif key == KEY_ENTER or key == KEY_KP_ENTER:
 				opt_rebinding = true
 			elif key == KEY_ESCAPE:
@@ -1864,16 +1878,19 @@ func _options_click(mp: Vector2, is_press: bool) -> void:
 			if not is_press:
 				return
 			var h := 110.0 + REBIND_ACTIONS.size() * 26.0
-			var w := 460.0
+			var w := 560.0
 			var px := (vs.x - w) * 0.5
 			var py := (vs.y - BAR_H - h) * 0.5
 			for i in REBIND_ACTIONS.size():
 				var yy := py + 62 + i * 26
-				if Rect2(px + 8, yy - 17, 444, 24).has_point(mp):
-					opt_index = i
-					opt_rebinding = true
-					_refresh()
-					return
+				# one clickable cell per keybind slot
+				for slot in 2:
+					if Rect2(px + 240 + slot * 156, yy - 17, 148, 24).has_point(mp):
+						opt_index = i
+						opt_bind_slot = slot
+						opt_rebinding = true
+						_refresh()
+						return
 
 func _toggle_fullscreen() -> void:
 	var win := get_window()
@@ -1900,7 +1917,12 @@ func _load_settings() -> void:
 		return
 	master_volume = cf.get_value("sound", "master", 1.0)
 	for a in REBIND_ACTIONS:
-		keymap[a] = cf.get_value("keys", a, keymap[a])
+		var v = cf.get_value("keys", a, keymap[a])
+		if typeof(v) == TYPE_INT:
+			# settings written before dual keybinds stored a single key
+			keymap[a] = [v, keymap[a][1]]
+		elif typeof(v) == TYPE_ARRAY and v.size() >= 2:
+			keymap[a] = [int(v[0]), int(v[1])]
 	if cf.get_value("graphics", "fullscreen", false):
 		get_window().mode = Window.MODE_FULLSCREEN
 
