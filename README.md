@@ -22,21 +22,31 @@ Movement is keyboard-only; the mouse operates the UI.
 - Diagonals: Q/E/Z/C, the numpad (1-9, roguelike layout), or two
   cardinal keys held together
 - Space: wait a turn
-- 5 (top row or numpad, or middle mouse): aim the active spell, then
-  click a tile to cast (the cursor becomes the spell icon while
-  aiming and the hovered tile is highlighted; Esc or right click
-  cancels)
+- Numpad 5 (or middle mouse): aim the active spell, then click a tile
+  to cast. While aiming the cursor becomes the spell icon, an aim
+  line runs from the hero to the cursor, and the hovered tile is
+  highlighted gold (clear shot) or red (out of range, or a tree or
+  wall in the way); Esc or right click cancels
 - P: spellbook — click a spell (or Up/Down + Enter) to make it the
   active one; the active spell and its mana cost are always visible
   in the HUD bar
+- M: world map — every region and dungeon you have visited, laid out
+  by their connections; neighboring places you have only heard of
+  show as "???"
 - I: character sheet (equipment paper-doll left, backpack right;
   arrows navigate, Left/Right switch side, Enter equips/uses/removes)
 - J: quest journal
 - Esc: close panels / open options
-- Mouse: the Inventory / Journal / Options buttons in the HUD bar are
-  clickable (click again to close); click items in the character sheet
-  to equip/unequip/use; click rows in a shop to buy/sell/buy back;
-  click options menu entries and drag the volume slider
+- Right click: universal "go back" — everything Esc dismisses, it
+  dismisses too (close any panel, step an options sub-screen back,
+  cancel a rebind or an aimed spell, leave the death screen); the
+  one thing it never does is open a menu
+- Mouse: the Inventory / Journal / Spells / Map / Options buttons in
+  the HUD bar are clickable (click again to close); click items in
+  the character sheet to equip/unequip/use; click rows in a shop to
+  buy/sell/buy back; click options menu entries and drag the volume
+  slider
+- Every action can be given up to two keybinds in the options menu
 - F11: toggle fullscreen
 - Enter: restart after death, dismiss the victory screen
 - Esc on the death screen: back to the title screen
@@ -45,19 +55,28 @@ Movement is keyboard-only; the mouse operates the UI.
 
 1. Grey Fortress Town: 4 vendor houses, healing temple, north gate
 2. Northern Wilds: rats, goblins, wild boars
-3. Dark Forest: wolves join in, denser trees
-4. Ancient Ruins: swarming with skeletons, plus goblins and trolls;
-   the Sunstone Relic lies between two trees near the north end
-5. Westmere Village (west of town, unlocked by the Sunstone Relic
+3. Dark Forest: wolves and goblin archers, the densest trees
+4. Ancient Ruins: swarming with skeletons, plus goblins, archers and
+   trolls; the Sunstone Relic lies between two trees near the north
+   end, and a sunken stairway near the east side leads underground
+5. Sunken Crypt: the first dungeon — a dark cave carved beneath the
+   ruins, haunted by skeletons and hexing wraiths, with the Sunken
+   Crown (+10 max HP) hidden in its farthest corner
+6. Westmere Village (west of town, unlocked by the Sunstone Relic
    quest): larger than town, eight vendors (stubs for now — shops
    and quests come later), a temple at the bottom, and a boarded-up
-   north gate to a future region (work in progress); its minimap
-   shows the village and the unexplored land beyond
+   north gate to a future region (work in progress)
 
-A winding road connects the south and north gates of every map,
-so you can never be walled in by the procedural generation.
+A winding road connects the south and north gates of every surface
+map, so you can never be walled in by the procedural generation.
 Every mob is drawn with its own face icon (rat whiskers, goblin
-ears, boar tusks, wolf muzzle, skull, troll underbite).
+ears, boar tusks, wolf muzzle, skull, troll underbite, archer
+headband, wraith glow).
+
+Maps connect through data-driven links (gates and stairs), and both
+the world map screen and all transitions derive from them — adding
+a region or another dungeon level is one entry in `MAP_DEFS` plus
+its entrance tile.
 
 ## Systems
 
@@ -68,11 +87,16 @@ ears, boar tusks, wolf muzzle, skull, troll underbite).
   (7 mana, 5 damage, range 5); projectiles animate to the target,
   rotated to point at it (spells only hit monsters for now;
   interacting with the environment is planned)
-- Mana: fully restored by leveling up, praying at the altar, or
-  mana potions (sold by Cyra the alchemist)
+- Line of sight: trees and walls block spell flight, for you and
+  for the enemy
+- Ranged mobs: goblin archers shoot arrows and wraiths hex from
+  afar whenever they can see you
+- Mana: slowly regenerates as you take turns (1 per 6), and is fully
+  restored by leveling up, praying at the altar, or mana potions
+  (sold by Cyra the alchemist)
 - Mobs show a little green HP bar underneath
 - Inventory: bread and potions heal; the relic is a quest item
-- Equipment: all 21 WoW-style slots (ammo through bag); items give
+- Equipment: 20 WoW-style slots (head through bag); items give
   damage or max HP bonuses; a bag in the Bag slot raises backpack
   capacity from 20 to 28 stacks (no weight limits)
 - Vendors: each is unique, drawn as a gold badge with a symbol for
@@ -107,10 +131,10 @@ ears, boar tusks, wolf muzzle, skull, troll underbite).
   away from where you arrive
 - "Entering..." banner the first time you reach each area
 - HP (red), Mana (blue), XP (green) bars in the HUD, plus clickable
-  Inventory / Journal / Options buttons
-- World minimap (bottom-right): the four maps stacked north-to-south,
-  visited areas colored, a dot for your position in the current map,
-  and the area name underneath
+  Inventory / Journal / Spells / Map / Options buttons
+- Minimap (bottom-right): the real terrain of the current area,
+  rendered once into a texture, with your position and the area
+  name; the world overview lives on the world map screen (M)
 - Options menu (O or Esc): master volume, keybinds, fullscreen;
   menu items and the sound slider also respond to mouse click/drag;
   settings persist to user://settings.cfg
@@ -135,13 +159,15 @@ Combat music triggers when any enemy has you inside its sight range and
 relaxes a few turns after you break contact.
 
 The weather ambience (seamless rain loop, distant thunder) is likewise
-synthesized from scratch by tools/make_ambience.py, and the epic
-title theme by tools/make_title.py. Public domain (CC0).
+synthesized from scratch by tools/make_ambience.py, the epic title
+theme by tools/make_title.py, and the sound effects (combat, items,
+magic, trading, quests, stairs, dying) by tools/make_sfx.py.
+Public domain (CC0).
 
 ## Next steps
 
-- Mob variety per map depth, ranged enemies
+- More dungeon levels below the Sunken Crypt
 - Real shops and quests for the eight Westmere vendors
 - The region beyond Westmere's boarded north gate
-- Sound effects
+- Spells that interact with the environment
 - Steam integration (achievements, cloud saves)

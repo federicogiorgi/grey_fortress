@@ -31,6 +31,8 @@ func _draw() -> void:
 			_draw_panel_options()
 		game.Mode.SPELLBOOK:
 			_draw_panel_spellbook()
+		game.Mode.WORLDMAP:
+			_draw_panel_worldmap()
 	if game.mode == game.Mode.PLAY and game.targeting:
 		_draw_targeting()
 	if game.banner_timer > 0.0:
@@ -204,20 +206,22 @@ func _draw_bar() -> void:
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.78, 0.78, 0.80))
 		line += 1
 
-	# The active spell, castable with 5 or the middle mouse button.
+	# The active spell, castable with the cast key or middle mouse.
 	var sp: Dictionary = game.SPELLS[game.active_spell]
-	var spell_x := vs.x - 428.0
+	var spell_x := vs.x - 489.0
 	draw_rect(Rect2(spell_x, y + 10, 26, 26), Color(0.13, 0.13, 0.18))
 	draw_rect(Rect2(spell_x, y + 10, 26, 26), Color(0.38, 0.38, 0.44), false, 1.0)
 	game.draw_projectile_icon(self, game.active_spell, Vector2(spell_x + 13, y + 23), 0.0, 1.0)
 	draw_string(font, Vector2(spell_x + 34, y + 22), sp["name"],
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.82, 0.82, 0.90))
-	draw_string(font, Vector2(spell_x + 34, y + 37), "%d mana - 5 casts" % sp["mana"],
+	draw_string(font, Vector2(spell_x + 34, y + 37),
+			"%d mana - %s casts" % [sp["mana"], game.spell_key_label()],
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.55, 0.55, 0.62))
 
 	# Clickable panel buttons (movement itself stays keyboard-only).
 	var rects: Array = game.bar_button_rects()
-	var target_modes := [game.Mode.INVENTORY, game.Mode.JOURNAL, game.Mode.SPELLBOOK, game.Mode.OPTIONS]
+	var target_modes := [game.Mode.INVENTORY, game.Mode.JOURNAL, game.Mode.SPELLBOOK,
+			game.Mode.WORLDMAP, game.Mode.OPTIONS]
 	for i in rects.size():
 		var r: Rect2 = rects[i]
 		var active: bool = game.mode == target_modes[i]
@@ -239,104 +243,163 @@ func _meter(pos: Vector2, w: float, frac: float, col: Color, label: String) -> v
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1, 1, 1, 0.88))
 
 
-# ---------------- world minimap ----------------
-# The four maps stacked north-to-south in the bottom-right corner,
-# with the player's dot in the current one and the area name below.
-const MINI_SCALE := 0.55
-const MINI_COLORS := {
-	"town":   Color(0.36, 0.42, 0.30),
-	"wilds":  Color(0.25, 0.37, 0.22),
-	"forest": Color(0.14, 0.29, 0.15),
-	"ruins":  Color(0.33, 0.34, 0.39),
+# ---------------- area minimap ----------------
+# The current area only: its real terrain, rendered once into a
+# texture (one pixel block per tile, integer zoom, nearest-neighbor)
+# and rebuilt when the map changes. The world overview lives in the
+# world map screen (M).
+var mini_tex: ImageTexture
+var mini_for := ""       # which map the texture was built for
+var mini_zoom := 1       # screen pixels per tile
+
+const MINI_TILE_COLORS := {
+	"T": Color(0.10, 0.30, 0.12), "~": Color(0.16, 0.30, 0.50),
+	"S": Color(0.55, 0.57, 0.66), "H": Color(0.45, 0.29, 0.15),
+	"D": Color(0.62, 0.44, 0.22), "A": Color(0.95, 0.80, 0.35),
+	"^": Color(0.85, 0.78, 0.55), "v": Color(0.85, 0.78, 0.55),
+	"<": Color(0.85, 0.78, 0.55), ">": Color(0.85, 0.78, 0.55),
+	"B": Color(0.40, 0.30, 0.15), "O": Color(0.04, 0.04, 0.06),
+	"U": Color(0.80, 0.78, 0.72),
 }
 
+func _build_minimap() -> void:
+	var g: Array = game.grid
+	var gw: int = g[0].size()
+	var gh: int = g.size()
+	mini_zoom = clamp(int(min(180.0 / gw, 126.0 / gh)), 1, 4)
+	var def: Dictionary = game.MAP_DEFS[game.current_map]
+	var floor_col: Color = def["tint"]
+	var wall_col: Color = def.get("palette", {}).get("wall", Color(0.45, 0.45, 0.50))
+	var img := Image.create(gw * mini_zoom, gh * mini_zoom, false, Image.FORMAT_RGB8)
+	for y in gh:
+		for x in gw:
+			var c: String = g[y][x]
+			var col: Color = MINI_TILE_COLORS.get(c, floor_col)
+			if c == "#":
+				col = wall_col
+			img.fill_rect(Rect2i(x * mini_zoom, y * mini_zoom, mini_zoom, mini_zoom), col)
+	mini_tex = ImageTexture.create_from_image(img)
+	mini_for = game.current_map
+	game.minimap_dirty = false
+
 func _draw_minimap() -> void:
-	if game.current_map == "west":
-		_draw_minimap_west()
-		return
+	if mini_for != game.current_map or game.minimap_dirty or mini_tex == null:
+		_build_minimap()
 	var vs := get_viewport_rect().size
 	var pad := 7.0
-	var gap := 3.0
+	var tw: float = mini_tex.get_width()
+	var th: float = mini_tex.get_height()
 	var label: String = game.MAP_DEFS[game.current_map]["name"]
 	var label_w: float = font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x
-	var maps_w := 0.0
-	var maps_h := 0.0
-	for id in game.WORLD_ORDER:
-		var def: Dictionary = game.MAP_DEFS[id]
-		maps_w = max(maps_w, def["w"] * MINI_SCALE)
-		maps_h += def["h"] * MINI_SCALE
-	maps_h += gap * (game.WORLD_ORDER.size() - 1)
-	var w: float = max(maps_w, label_w) + pad * 2
-	var h: float = maps_h + pad * 2 + 17.0
+	var w: float = max(tw, label_w) + pad * 2
+	var h: float = th + pad * 2 + 17.0
 	var px := vs.x - w - 10.0
 	var py := vs.y - BAR_H - h - 10.0
 
-	draw_rect(Rect2(px, py, w, h), Color(0.06, 0.06, 0.09, 0.80))
+	draw_rect(Rect2(px, py, w, h), Color(0.06, 0.06, 0.09, 0.82))
 	draw_rect(Rect2(px, py, w, h), Color(0.35, 0.35, 0.42), false, 1.0)
-
-	var yy := py + pad
-	for id in game.WORLD_ORDER:
-		var def: Dictionary = game.MAP_DEFS[id]
-		var mw: float = def["w"] * MINI_SCALE
-		var mh: float = def["h"] * MINI_SCALE
-		var mx: float = px + (w - mw) * 0.5
-		var col: Color = MINI_COLORS[id] if game.visited.has(id) else Color(0.11, 0.11, 0.14)
-		draw_rect(Rect2(mx, yy, mw, mh), col)
-		if id == game.current_map:
-			draw_rect(Rect2(mx, yy, mw, mh), Color(0.85, 0.72, 0.20), false, 1.0)
-			var dot := Vector2(
-					mx + (game.player_pos.x + 0.5) / float(def["w"]) * mw,
-					yy + (game.player_pos.y + 0.5) / float(def["h"]) * mh)
-			draw_circle(dot, 2.2, Color(1.0, 0.95, 0.75))
-			draw_circle(dot, 2.2, Color(0.3, 0.2, 0.0), false, 0.8)
-		else:
-			draw_rect(Rect2(mx, yy, mw, mh), Color(0.25, 0.25, 0.30), false, 1.0)
-		yy += mh + gap
-
+	var mx: float = px + (w - tw) * 0.5
+	var my: float = py + pad
+	draw_texture(mini_tex, Vector2(mx, my))
+	var dot := Vector2(mx, my) + (Vector2(game.player_pos) + Vector2(0.5, 0.5)) * mini_zoom
+	draw_circle(dot, 2.4, Color(1.0, 0.95, 0.75))
+	draw_circle(dot, 2.4, Color(0.3, 0.2, 0.0), false, 0.8)
 	draw_string(font, Vector2(px + (w - label_w) * 0.5, py + h - 6.0), label,
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.92, 0.88, 0.75))
 
-# Westmere gets its own minimap: the village itself, with the region
-# beyond its boarded north gate marked "work in progress".
-func _draw_minimap_west() -> void:
+
+# ---------------- world map (M) ----------------
+# Nodes come from game.world_layout(), which follows the MAP_DEFS
+# links: any future region or dungeon level appears automatically.
+# Visited areas show their name; areas merely glimpsed from a
+# neighbor show "???", and Westmere's boarded gate shows the
+# work-in-progress region to its north.
+func _draw_panel_worldmap() -> void:
 	var vs := get_viewport_rect().size
-	var pad := 7.0
-	var def: Dictionary = game.MAP_DEFS["west"]
-	var mw: float = def["w"] * 2.0
-	var mh: float = def["h"] * 2.0
-	var wip_h := 44.0
-	var label: String = def["name"]
-	var label_w: float = font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x
-	var w: float = max(mw, label_w) + pad * 2
-	var h: float = wip_h + 3.0 + mh + pad * 2 + 17.0
-	var px := vs.x - w - 10.0
-	var py := vs.y - BAR_H - h - 10.0
+	var w: float = vs.x - 240.0
+	var h: float = vs.y - BAR_H - 90.0
+	var p := _panel(w, h, "World Map")
 
-	draw_rect(Rect2(px, py, w, h), Color(0.06, 0.06, 0.09, 0.80))
-	draw_rect(Rect2(px, py, w, h), Color(0.35, 0.35, 0.42), false, 1.0)
+	var layout: Dictionary = game.world_layout()
+	# what to show: visited areas, plus unvisited neighbors as "???"
+	var shown := {}
+	for id in layout:
+		if game.visited.has(id):
+			shown[id] = "known"
+	for id in layout.keys():
+		if not shown.has(id):
+			continue
+		for link in game.WORLD_LINK_DIRS:
+			var def: Dictionary = game.MAP_DEFS[id]
+			if def.has(link) and not shown.has(def[link]):
+				shown[def[link]] = "mystery"
+	# the boarded gate north of Westmere hints at the future region
+	var extra := {}
+	if game.visited.has("west"):
+		extra["wip"] = layout["west"] + Vector2(0, -1)
 
-	# the unexplored region north of the gate
-	var wip := Rect2(px + pad, py + pad, w - pad * 2, wip_h)
-	draw_rect(wip, Color(0.10, 0.10, 0.13))
-	draw_rect(wip, Color(0.30, 0.30, 0.36), false, 1.0)
-	var wip_text := "work in progress"
-	var ww: float = font.get_string_size(wip_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x
-	draw_string(font, Vector2(wip.position.x + (wip.size.x - ww) * 0.5, wip.position.y + 27),
-			wip_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.55, 0.55, 0.62))
+	# fit the abstract grid into the panel
+	var lo := Vector2(1e9, 1e9)
+	var hi := Vector2(-1e9, -1e9)
+	for id in shown:
+		lo = lo.min(layout[id])
+		hi = hi.max(layout[id])
+	for id in extra:
+		lo = lo.min(extra[id])
+		hi = hi.max(extra[id])
+	var span := (hi - lo).max(Vector2.ONE)
+	var cell := Vector2(min(200.0, (w - 220.0) / span.x), min(105.0, (h - 140.0) / span.y))
+	var origin := Vector2(p.x, p.y + 30.0) + Vector2(w, h - 30.0) * 0.5 \
+			- (lo + span * 0.5) * cell
+	var node_size := Vector2(158, 52)
 
-	# the village, with the player dot
-	var mx: float = px + (w - mw) * 0.5
-	var my: float = py + pad + wip_h + 3.0
-	draw_rect(Rect2(mx, my, mw, mh), Color(0.36, 0.42, 0.30))
-	draw_rect(Rect2(mx, my, mw, mh), Color(0.85, 0.72, 0.20), false, 1.0)
-	var dot := Vector2(
-			mx + (game.player_pos.x + 0.5) / float(def["w"]) * mw,
-			my + (game.player_pos.y + 0.5) / float(def["h"]) * mh)
-	draw_circle(dot, 2.2, Color(1.0, 0.95, 0.75))
-	draw_circle(dot, 2.2, Color(0.3, 0.2, 0.0), false, 0.8)
+	# connections first, so nodes draw over them
+	for id in shown:
+		var def: Dictionary = game.MAP_DEFS[id]
+		for link in game.WORLD_LINK_DIRS:
+			if def.has(link) and shown.has(def[link]):
+				draw_line(origin + layout[id] * cell, origin + layout[def[link]] * cell,
+						Color(0.40, 0.40, 0.48), 2.0)
+	if extra.has("wip"):
+		draw_line(origin + layout["west"] * cell, origin + extra["wip"] * cell,
+				Color(0.30, 0.30, 0.36), 2.0)
 
-	draw_string(font, Vector2(px + (w - label_w) * 0.5, py + h - 6.0), label,
-			HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.92, 0.88, 0.75))
+	for id in shown:
+		var center: Vector2 = origin + layout[id] * cell
+		var r := Rect2(center - node_size * 0.5, node_size)
+		if shown[id] == "known":
+			var def: Dictionary = game.MAP_DEFS[id]
+			draw_rect(r, def["tint"])
+			var cur: bool = id == game.current_map
+			draw_rect(r, Color(0.95, 0.82, 0.25) if cur else Color(0.55, 0.55, 0.62),
+					false, 2.0 if cur else 1.0)
+			var label: String = def["name"]
+			var lw: float = font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x
+			draw_string(font, center + Vector2(-lw * 0.5, -2 if cur else 5), label,
+					HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.95, 0.93, 0.85))
+			if cur:
+				var you := "* you are here *"
+				var yw: float = font.get_string_size(you, HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x
+				draw_string(font, center + Vector2(-yw * 0.5, 15), you,
+						HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.95, 0.85, 0.45))
+		else:
+			draw_rect(r, Color(0.10, 0.10, 0.14))
+			draw_rect(r, Color(0.30, 0.30, 0.36), false, 1.0)
+			var qw: float = font.get_string_size("???", HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x
+			draw_string(font, center + Vector2(-qw * 0.5, 5), "???",
+					HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.50, 0.50, 0.58))
+	if extra.has("wip"):
+		var center: Vector2 = origin + extra["wip"] * cell
+		var r := Rect2(center - node_size * 0.5, node_size)
+		draw_rect(r, Color(0.08, 0.08, 0.11))
+		draw_rect(r, Color(0.26, 0.26, 0.32), false, 1.0)
+		var wt := "work in progress"
+		var ww: float = font.get_string_size(wt, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x
+		draw_string(font, center + Vector2(-ww * 0.5, 5), wt,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.48, 0.48, 0.55))
+
+	draw_string(font, Vector2(p.x + 16, p.y + h - 16), "Press any key or click to close.",
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.5, 0.5, 0.58))
 
 
 # ---------------- shared panel frame ----------------
@@ -365,7 +428,7 @@ func _draw_panel_character() -> void:
 	draw_line(Vector2(inv_x - 18, p.y + 44), Vector2(inv_x - 18, p.y + h - 40),
 			Color(0.28, 0.28, 0.34), 1.0)
 
-	# --- left: the hero, stats, and the 21 equipment slots ---
+	# --- left: the hero, stats, and the 20 equipment slots ---
 	game.draw_hero_on(self, Vector2(p.x + 410, p.y + 150), 4.5)
 	draw_string(font, Vector2(p.x + 356, p.y + 250), "Dmg %d" % game.player_dmg,
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.85, 0.7, 0.6))
@@ -415,7 +478,7 @@ func _draw_panel_character() -> void:
 				Color(0.85, 0.85, 0.88) if (it.has("slot") or usable) else Color(0.62, 0.62, 0.68))
 
 	draw_string(font, Vector2(p.x + 16, p.y + h - 14),
-			"Up/Down: select     Left/Right: switch side     Enter: equip / use / remove     Esc or I: close",
+			"Up/Down: select     Left/Right: switch side     Enter: equip / use / remove     Esc / right click / I: close",
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.5, 0.5, 0.58))
 
 
@@ -444,13 +507,15 @@ func _draw_panel_spellbook() -> void:
 				"%d mana, %d damage, range %d - %s" % [sp["mana"], sp["dmg"], sp["range"], sp["desc"]],
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.62, 0.62, 0.68))
 	draw_string(font, Vector2(p.x + 16, p.y + h - 16),
-			"Click a spell (or Up/Down + Enter) to make it the active one. Esc closes.",
+			"Click a spell (or Up/Down + Enter) to make it the active one. Esc or right click closes.",
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.5, 0.5, 0.58))
 
 
 # ---------------- aiming overlay ----------------
-# While targeting, the OS cursor is hidden: the projectile icon takes
-# its place and the hovered tile is highlighted (gold in range, red out).
+# While targeting, the OS cursor is hidden: the spell icon takes its
+# place, an aim line runs from the player to the cursor, and the
+# hovered tile is highlighted (gold when castable, red when out of
+# range or with a tree/wall in the way).
 func _draw_targeting() -> void:
 	var vs := get_viewport_rect().size
 	var mp := get_viewport().get_mouse_position()
@@ -458,9 +523,12 @@ func _draw_targeting() -> void:
 		var tile: Vector2i = game.screen_to_tile(mp)
 		var topleft: Vector2 = game.camera.get_screen_center_position() - vs * 0.5
 		var spos := Vector2(tile) * float(game.TILE) - topleft
-		var ok: bool = game.target_in_range(tile)
-		draw_rect(Rect2(spos, Vector2(game.TILE, game.TILE)),
-				Color(0.95, 0.85, 0.30, 0.9) if ok else Color(0.90, 0.25, 0.20, 0.9), false, 2.0)
+		var ok: bool = game.can_target(tile)
+		var col := Color(0.95, 0.85, 0.30) if ok else Color(0.90, 0.25, 0.20)
+		var player_screen := (Vector2(game.player_pos) + Vector2(0.5, 0.5)) * float(game.TILE) - topleft
+		draw_line(player_screen, spos + Vector2(game.TILE, game.TILE) * 0.5,
+				Color(col.r, col.g, col.b, 0.35), 2.0)
+		draw_rect(Rect2(spos, Vector2(game.TILE, game.TILE)), col, false, 2.0)
 	game.draw_projectile_icon(self, game.active_spell, mp, 0.0, 1.5)
 	var hint := "Click a tile to cast. Esc or right click cancels."
 	var hw: float = font.get_string_size(hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x
@@ -552,7 +620,7 @@ func _draw_panel_shop() -> void:
 						HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.85, 0.85, 0.88))
 				act += 1
 	draw_string(font, Vector2(p.x + 16, p.y + h - 16),
-			"Up/Down + Enter or click a row. Numbers quick-buy. Esc closes.",
+			"Up/Down + Enter or click a row. Numbers quick-buy. Esc or right click closes.",
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.5, 0.5, 0.58))
 
 
@@ -622,7 +690,7 @@ func _draw_panel_options() -> void:
 					draw_rect(Rect2(p.x + 8, yy - 18, 404, 26), Color(0.22, 0.26, 0.36))
 				draw_string(font, Vector2(p.x + 20, yy), game.OPT_MAIN[i],
 						HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(0.88, 0.88, 0.9))
-			draw_string(font, Vector2(p.x + 16, p.y + 234), "Up/Down + Enter, or click/tap. Esc closes.",
+			draw_string(font, Vector2(p.x + 16, p.y + 234), "Up/Down + Enter, or click/tap. Esc or right click closes.",
 					HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.5, 0.5, 0.58))
 		"graphics":
 			var p := _panel(420.0, 150.0, "Options - Graphics")
@@ -630,7 +698,7 @@ func _draw_panel_options() -> void:
 			draw_rect(Rect2(p.x + 8, p.y + 46, 404, 26), Color(0.22, 0.26, 0.36))
 			draw_string(font, Vector2(p.x + 20, p.y + 64), "Fullscreen: %s" % ("On" if fs else "Off"),
 					HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(0.88, 0.88, 0.9))
-			draw_string(font, Vector2(p.x + 16, p.y + 134), "Enter or click/tap toggles. Esc goes back.",
+			draw_string(font, Vector2(p.x + 16, p.y + 134), "Enter or click/tap toggles. Esc or right click goes back.",
 					HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.5, 0.5, 0.58))
 		"sound":
 			var p := _panel(420.0, 160.0, "Options - Sound")
@@ -638,7 +706,7 @@ func _draw_panel_options() -> void:
 					HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(0.88, 0.88, 0.9))
 			_meter(Vector2(p.x + 20, p.y + 76), 380.0, game.master_volume,
 					Color(0.75, 0.62, 0.20), "")
-			draw_string(font, Vector2(p.x + 16, p.y + 144), "Left/Right adjust, or click/drag the bar. Esc goes back.",
+			draw_string(font, Vector2(p.x + 16, p.y + 144), "Left/Right adjust, or click/drag the bar. Esc or right click goes back.",
 					HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.5, 0.5, 0.58))
 		"keybinds":
 			# Every action has two keybind cells; cell geometry must
@@ -665,5 +733,5 @@ func _draw_panel_options() -> void:
 							HORIZONTAL_ALIGNMENT_LEFT, -1, 13,
 							Color(0.95, 0.85, 0.5) if editing else Color(0.88, 0.88, 0.9))
 			draw_string(font, Vector2(p.x + 16, p.y + h - 16),
-					"Up/Down row, Left/Right slot, Enter rebind - or click a cell. Esc goes back.",
+					"Up/Down row, Left/Right slot, Enter rebind - or click a cell. Esc or right click goes back.",
 					HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.5, 0.5, 0.58))

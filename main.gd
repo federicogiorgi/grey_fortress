@@ -1,30 +1,33 @@
 extends Node2D
 # =============================================================
-#  GREY FORTRESS - v7
+#  GREY FORTRESS - v8
 #
 #  New in this version:
-#   - Magic: 5 (or middle mouse) aims the active spell; the
-#     spellbook (P) picks it. Three spells: Magic Dart (3 mana,
-#     2 dmg, range 7), Bone Arrow (5 mana, 3 dmg, range 9) and
-#     Fire Boulder (7 mana, 5 dmg, range 5)
-#   - While aiming, the cursor becomes the spell icon and the
-#     hovered tile is highlighted; Esc or right click cancels.
-#     Projectiles fly to the target, rotated to point at it
-#   - Ranged weapons were cut: combat magic replaces them, and
-#     the Hunter's Belt replaces the Hunter's Bow outpost loot
-#   - Every action can have two keybinds (numpad defaults ride
-#     along: e.g. move up is W and numpad 8, cast is 5 and KP5)
-#   - The active spell shows in the HUD bar; mana potions are
-#     sold by Cyra; mana refills on level-up and at the altar
-#   - Mobs show a little green HP bar underneath
+#   - The minimap shows the actual terrain of the current area
+#     only (a cached texture); M opens the world map, whose
+#     layout derives from the MAP_DEFS links, ready for future
+#     regions and dungeons
+#   - The first dungeon: the Sunken Crypt, a cave carved under
+#     the Ancient Ruins (stairway near its east side), haunted
+#     by skeletons and wraiths and hiding the Sunken Crown
+#   - Trees and walls block spell flight (Bresenham line of
+#     sight); the aim line shows whether the shot is clear
+#   - Ranged mobs: goblin archers (forest, ruins) shoot arrows,
+#     wraiths (crypt) hex from afar - both respect line of sight
+#   - Mana slowly regenerates while adventuring (1 per 6 turns)
+#   - Synthesized sound effects for combat, items, magic,
+#     trading, quests, stairs and dying (tools/make_sfx.py)
+#   - The top-row 5 is no longer a default cast key (numpad 5
+#     and middle mouse remain); tree densities retuned per map
 #
-#  v6: title screen + epic theme, save/load, death details,
-#  Westmere Village, Leather Armor reward, green goblins.
+#  v7: three spells + spellbook + targeting + projectiles + mana
+#  potions + HP bars; ranged weapons came and went; dual keybinds.
+#  v6: title screen, save/load, death details, Westmere Village.
 #  v5: minimap, mob icons, rain, two-tier vendors, respawns.
 #  v4: unique vendors, sell/buyback, victory, clickable HUD.
 # =============================================================
 
-enum Mode { TITLE, PLAY, INVENTORY, JOURNAL, SHOP, OPTIONS, SPELLBOOK }
+enum Mode { TITLE, PLAY, INVENTORY, JOURNAL, SHOP, OPTIONS, SPELLBOOK, WORLDMAP }
 
 const TILE := 32
 const BAR_H := 84                 # must match hud.gd
@@ -32,33 +35,38 @@ const MOVE_DELAY_FIRST := 0.22    # delay before hold-to-walk kicks in
 const MOVE_DELAY_REPEAT := 0.115  # steps per second while holding ~ 8.7
 
 # ---- world definition -------------------------------------
+# Maps connect through directional links (north/south/east/west for
+# gates, down/up for stairs). The world map screen and all
+# transitions are derived from these links, so adding a region or a
+# dungeon level is one entry here plus its entrance tile. "tint" is
+# the map's identity color on the minimap and the world map.
 const MAP_DEFS := {
 	"town": {
 		# The west gate exists in the def but its "<" tiles are only
 		# carved into the map once the Sunstone Relic quest is done.
 		"name": "Grey Fortress Town", "north": "wilds", "west": "west", "music": "town",
-		"w": 42, "h": 30,
+		"w": 42, "h": 30, "tint": Color(0.36, 0.42, 0.30),
 		"tree_density": 0.040, "water_blobs": 0, "mobs": {},
 	},
 	"wilds": {
 		"name": "Northern Wilds", "south": "town", "north": "forest", "music": "wilds",
-		"w": 125, "h": 94,
-		"tree_density": 0.050, "water_blobs": 3,
+		"w": 125, "h": 94, "tint": Color(0.25, 0.37, 0.22),
+		"tree_density": 0.040, "water_blobs": 3,
 		"mobs": { "r": 12, "g": 8, "b": 5 },
 		"outpost": { "x": 28, "y": 38, "item": "boots" },
 	},
 	"forest": {
 		"name": "Dark Forest", "south": "wilds", "north": "ruins", "music": "forest",
-		"w": 125, "h": 94,
-		"tree_density": 0.100, "water_blobs": 2,
-		"mobs": { "w": 9, "g": 8, "b": 6 },
+		"w": 125, "h": 94, "tint": Color(0.14, 0.29, 0.15),
+		"tree_density": 0.115, "water_blobs": 2,
+		"mobs": { "w": 9, "g": 8, "b": 6, "a": 5 },
 		"outpost": { "x": 88, "y": 50, "item": "belt" },
 	},
 	"ruins": {
-		"name": "Ancient Ruins", "south": "forest", "music": "ruins",
-		"w": 125, "h": 94,
-		"tree_density": 0.030, "water_blobs": 1, "ruin_walls": true,
-		"mobs": { "s": 14, "g": 6, "t": 4 },
+		"name": "Ancient Ruins", "south": "forest", "down": "crypt", "music": "ruins",
+		"w": 125, "h": 94, "tint": Color(0.33, 0.34, 0.39),
+		"tree_density": 0.024, "water_blobs": 1, "ruin_walls": true,
+		"mobs": { "s": 14, "g": 6, "t": 4, "a": 4 },
 		"outpost": { "x": 28, "y": 58, "item": "legplates" },
 	},
 	# Reached through the west gate of town, which only opens once the
@@ -66,13 +74,21 @@ const MAP_DEFS := {
 	# up: a future region, still work in progress.
 	"west": {
 		"name": "Westmere Village", "east": "town", "music": "town",
-		"w": 50, "h": 36,
+		"w": 50, "h": 36, "tint": Color(0.36, 0.42, 0.30),
 		"tree_density": 0.035, "water_blobs": 0, "mobs": {},
+	},
+	# The first dungeon: a cave carved under the Ancient Ruins,
+	# reached by the sunken stairway ("O" tile) near its east side.
+	"crypt": {
+		"name": "Sunken Crypt", "up": "ruins", "music": "ruins",
+		"w": 60, "h": 44, "tint": Color(0.18, 0.15, 0.22),
+		"tree_density": 0.0, "water_blobs": 0, "cave": true,
+		"palette": { "floor": Color(0.16, 0.14, 0.19), "floor_hi": Color(0.20, 0.17, 0.23),
+				"wall": Color(0.10, 0.09, 0.13), "wall_hi": Color(0.15, 0.13, 0.18) },
+		"mobs": { "s": 10, "y": 6 },
 	},
 }
 
-# The world from north to south, for the HUD minimap.
-const WORLD_ORDER := ["ruins", "forest", "wilds", "town"]
 const RAIN_CHANCE := 0.10
 
 # ---- magic ------------------------------------------------
@@ -101,6 +117,14 @@ const MOB_TYPES := {
 			"coins": [5, 9],   "color": Color(0.80, 0.80, 0.72) },
 	"t": { "name": "troll",     "hp": 10, "dmg": 3, "sight": 6,  "xp": 25,
 			"coins": [10, 18], "color": Color(0.25, 0.40, 0.22) },
+	# Ranged mobs: when the player is in range with a clear line of
+	# sight they shoot instead of moving ("ranged": dmg/range/kind).
+	"a": { "name": "goblin archer", "hp": 3, "dmg": 1, "sight": 10, "xp": 12,
+			"coins": [4, 8],   "color": Color(0.24, 0.42, 0.16),
+			"ranged": { "dmg": 2, "range": 6, "kind": "arrow", "verb": "shoots" } },
+	"y": { "name": "wraith",    "hp": 5,  "dmg": 2, "sight": 11, "xp": 20,
+			"coins": [6, 12],  "color": Color(0.55, 0.60, 0.75),
+			"ranged": { "dmg": 2, "range": 5, "kind": "dart", "verb": "hexes" } },
 }
 
 # Vendor stock comes in two tiers per item type: the second tier is
@@ -117,49 +141,51 @@ const ITEMS := {
 			"desc": "Restores 18 HP" },
 	"mpotion": { "name": "Mana Potion",     "price": 12, "mana_heal": 8,
 			"desc": "Restores 8 mana" },
-	"sword":  { "name": "Iron Sword",       "price": 25, "slot": 16, "dmg": 1,
+	"sword":  { "name": "Iron Sword",       "price": 25, "slot": 15, "dmg": 1,
 			"desc": "+1 damage" },
-	"ssword": { "name": "Steel Sword",      "price": 60, "slot": 16, "dmg": 2,
+	"ssword": { "name": "Steel Sword",      "price": 60, "slot": 15, "dmg": 2,
 			"desc": "+2 damage" },
-	"shield": { "name": "Wooden Shield",    "price": 15, "slot": 17, "hp": 3,
+	"shield": { "name": "Wooden Shield",    "price": 15, "slot": 16, "hp": 3,
 			"desc": "+3 max HP" },
-	"tshield": { "name": "Tower Shield",    "price": 40, "slot": 17, "hp": 6,
+	"tshield": { "name": "Tower Shield",    "price": 40, "slot": 16, "hp": 6,
 			"desc": "+6 max HP" },
-	"cap":    { "name": "Leather Cap",      "price": 10, "slot": 1,  "hp": 2,
+	"cap":    { "name": "Leather Cap",      "price": 10, "slot": 0,  "hp": 2,
 			"desc": "+2 max HP" },
-	"helm":   { "name": "Iron Helm",        "price": 28, "slot": 1,  "hp": 4,
+	"helm":   { "name": "Iron Helm",        "price": 28, "slot": 0,  "hp": 4,
 			"desc": "+4 max HP" },
-	"charm":  { "name": "Lucky Charm",      "price": 20, "slot": 13, "hp": 4,
+	"charm":  { "name": "Lucky Charm",      "price": 20, "slot": 12, "hp": 4,
 			"desc": "+4 max HP" },
-	"talisman": { "name": "Moon Talisman",  "price": 50, "slot": 13, "hp": 8,
+	"talisman": { "name": "Moon Talisman",  "price": 50, "slot": 12, "hp": 8,
 			"desc": "+8 max HP" },
-	"cloak":  { "name": "Traveler's Cloak", "price": 12, "slot": 15, "hp": 2,
+	"cloak":  { "name": "Traveler's Cloak", "price": 12, "slot": 14, "hp": 2,
 			"desc": "+2 max HP" },
-	"fcloak": { "name": "Fur-lined Cloak",  "price": 32, "slot": 15, "hp": 4,
+	"fcloak": { "name": "Fur-lined Cloak",  "price": 32, "slot": 14, "hp": 4,
 			"desc": "+4 max HP" },
-	"ring":   { "name": "Copper Ring",      "price": 8,  "slot": 11, "hp": 1,
+	"ring":   { "name": "Copper Ring",      "price": 8,  "slot": 10, "hp": 1,
 			"desc": "+1 max HP" },
-	"sring":  { "name": "Silver Ring",      "price": 22, "slot": 11, "hp": 2,
+	"sring":  { "name": "Silver Ring",      "price": 22, "slot": 10, "hp": 2,
 			"desc": "+2 max HP" },
-	"bag":    { "name": "Small Bag",        "price": 18, "slot": 20, "bag_slots": 8,
+	"bag":    { "name": "Small Bag",        "price": 18, "slot": 19, "bag_slots": 8,
 			"desc": "+8 inventory slots" },
-	"lbag":   { "name": "Traveler's Pack",  "price": 45, "slot": 20, "bag_slots": 14,
+	"lbag":   { "name": "Traveler's Pack",  "price": 45, "slot": 19, "bag_slots": 14,
 			"desc": "+14 inventory slots" },
 	"relic":  { "name": "Sunstone Relic",   "price": 0,
 			"desc": "Quest item, warm to the touch" },
-	"armor":  { "name": "Leather Armor",    "price": 0, "slot": 5,  "hp": 4,
+	"armor":  { "name": "Leather Armor",    "price": 0, "slot": 4,  "hp": 4,
 			"desc": "+4 max HP" },
-	"boots":  { "name": "Scout's Boots",     "price": 0, "slot": 8,  "hp": 6,
+	"boots":  { "name": "Scout's Boots",     "price": 0, "slot": 7,  "hp": 6,
 			"desc": "+6 max HP" },
-	"belt":   { "name": "Hunter's Belt",     "price": 0, "slot": 6,  "hp": 8,
+	"belt":   { "name": "Hunter's Belt",     "price": 0, "slot": 5,  "hp": 8,
 			"desc": "+8 max HP" },
-	"legplates": { "name": "Ancient Legplates", "price": 0, "slot": 7, "hp": 9,
+	"legplates": { "name": "Ancient Legplates", "price": 0, "slot": 6, "hp": 9,
 			"desc": "+9 max HP" },
+	"crown":  { "name": "Sunken Crown",      "price": 0, "slot": 0,  "hp": 10,
+			"desc": "+10 max HP" },
 }
 
 # World-of-Warcraft-style equipment slots, in canonical order.
 const SLOT_NAMES := [
-	"Ammo", "Head", "Neck", "Shoulder", "Shirt", "Chest", "Belt", "Legs",
+	"Head", "Neck", "Shoulder", "Shirt", "Chest", "Belt", "Legs",
 	"Feet", "Wrist", "Gloves", "Finger 1", "Finger 2", "Trinket 1",
 	"Trinket 2", "Back", "Main Hand", "Off Hand", "Ranged", "Tabard", "Bag",
 ]
@@ -255,7 +281,11 @@ var buyback := {}       # vendor set_idx -> [{id, price}] items sold to them
 var active_spell := "dart"
 var spellbook_index := 0
 var targeting := false  # aiming the active spell at a tile
-var projectile := {}    # in-flight shot: {kind, from, to, t, target, dmg}
+# In-flight shots: {kind, from, to, t, dur, player, [target, dmg]}.
+# The player's shot resolves on impact and blocks input; hostile
+# shots are visual only (their damage lands when fired).
+var projectiles := []
+var minimap_dirty := true   # tells the HUD to rebuild its terrain texture
 
 var messages := []
 var game_over := false
@@ -279,8 +309,16 @@ var keymap := {
 	"down_left": [KEY_Z, KEY_KP_1], "down_right": [KEY_C, KEY_KP_3],
 	"wait": [KEY_SPACE, KEY_NONE], "character": [KEY_I, KEY_NONE],
 	"journal": [KEY_J, KEY_NONE], "options": [KEY_O, KEY_NONE],
-	"spell": [KEY_5, KEY_KP_5], "spellbook": [KEY_P, KEY_NONE],
+	"spell": [KEY_KP_5, KEY_NONE], "spellbook": [KEY_P, KEY_NONE],
+	"map": [KEY_M, KEY_NONE],
 }
+
+# The first bound cast key, for UI hints ("Kp 5 casts").
+func spell_key_label() -> String:
+	for k in keymap["spell"]:
+		if k != KEY_NONE:
+			return OS.get_keycode_string(k)
+	return "middle mouse"
 
 func key_is(action: String, key: int) -> bool:
 	return key != KEY_NONE and key in keymap[action]
@@ -303,6 +341,19 @@ var banner_timer := 0.0
 var music: AudioStreamPlayer
 var music_track := ""
 var combat_heat := 0   # turns of combat music left after last enemy sighting
+
+# ---- sound effects ----
+const SFX_NAMES := ["hit", "kill", "coin", "pickup", "levelup", "cast",
+		"hurt", "death", "quest", "drink", "stairs"]
+var sfx_streams := {}
+var sfx_pool := []      # a few players so overlapping cues don't cut off
+var sfx_idx := 0
+
+# Current map's terrain palette (cached in _load_map: _draw_tile is hot).
+var pal_floor := Color(0.20, 0.26, 0.18)
+var pal_floor_hi := Color(0.24, 0.31, 0.21)
+var pal_wall := Color(0.38, 0.38, 0.44)
+var pal_wall_hi := Color(0.48, 0.48, 0.54)
 
 # ---- weather ----
 var raining := false
@@ -337,15 +388,28 @@ func _ready() -> void:
 	thunder_player.volume_db = -4.0
 	thunder_player.stream = load("res://audio/thunder.ogg")
 	add_child(thunder_player)
+	for n in SFX_NAMES:
+		sfx_streams[n] = load("res://audio/sfx_%s.ogg" % n)
+	for i in 5:
+		var p := AudioStreamPlayer.new()
+		p.volume_db = -6.0
+		add_child(p)
+		sfx_pool.append(p)
 	_apply_volume()
 	_show_title()
+
+func _sfx(sound: String) -> void:
+	var p: AudioStreamPlayer = sfx_pool[sfx_idx]
+	sfx_idx = (sfx_idx + 1) % sfx_pool.size()
+	p.stream = sfx_streams[sound]
+	p.play()
 
 func _show_title() -> void:
 	mode = Mode.TITLE
 	title_index = 0
 	game_over = false
 	victory_banner = false
-	projectile = {}
+	projectiles.clear()
 	_cancel_targeting()
 	_set_rain(false)
 	_play_track("title")
@@ -374,7 +438,7 @@ func _start() -> void:
 	buyback = {}
 	shop_index = 0
 	active_spell = "dart"
-	projectile = {}
+	projectiles.clear()
 	_cancel_targeting()
 	mode = Mode.PLAY
 	messages = []
@@ -388,7 +452,7 @@ func _start() -> void:
 		quests.append(q)
 	_load_map("town", "spawn")
 	_log("Welcome to Grey Fortress.")
-	_log("Arrows/WASD move. I character, J journal, P spells, 5 casts, O options.")
+	_log("Arrows/WASD move. I character, J journal, P spells, M map, O options.")
 	_update_music()
 	_refresh()
 
@@ -411,8 +475,9 @@ func _process(delta: float) -> void:
 		banner_timer -= delta
 		hud.queue_redraw()
 	_weather_tick(delta)
-	if not projectile.is_empty():
-		_advance_projectile(delta)
+	if not projectiles.is_empty():
+		_advance_projectiles(delta)
+	if _shot_in_flight():
 		held_dir = Vector2i.ZERO
 		return
 	if game_over or victory_banner or mode != Mode.PLAY:
@@ -488,10 +553,22 @@ func _load_map(id: String, arrive: String) -> void:
 			player_pos = st["east_gate"] + Vector2i(-1, 0)
 		"west_gate":
 			player_pos = st["west_gate"] + Vector2i(1, 0)
+		"descend":
+			player_pos = st["stairs_up"]     # arrive on the up-stairs below
+		"ascend":
+			player_pos = st["stairs_down"]   # arrive on the down-stairs above
 		"keep":
 			pass   # loading a save: player_pos is restored by the caller
 	if revisit and arrive != "keep":
 		_respawn_mobs()
+	# cache the map's terrain palette for the tile renderer
+	var pal: Dictionary = MAP_DEFS[id].get("palette", {})
+	pal_floor = pal.get("floor", Color(0.20, 0.26, 0.18))
+	pal_floor_hi = pal.get("floor_hi", Color(0.24, 0.31, 0.21))
+	pal_wall = pal.get("wall", Color(0.38, 0.38, 0.44))
+	pal_wall_hi = pal.get("wall_hi", Color(0.48, 0.48, 0.54))
+	projectiles.clear()
+	minimap_dirty = true
 	camera.limit_left = 0
 	# The camera has a +BAR_H/2 vertical offset (so the player is centered
 	# in the area above the HUD bar). Offsets are applied AFTER limits in
@@ -515,6 +592,10 @@ func _generate_map(id: String) -> Dictionary:
 	var gx: int = w / 2      # gates sit at columns gx, gx+1
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash(id)
+
+	# Caves skip the surface steps entirely: solid rock, carved tunnels.
+	if def.has("cave"):
+		return _generate_cave(def, rng)
 
 	# 1. Base: grass with a wall border.
 	var g := []
@@ -644,6 +725,13 @@ func _generate_map(id: String) -> Dictionary:
 		for x in range(min(ox + 4, gx - 7), max(ox + 4, gx + 7) + 1):
 			g[cy][x] = "."
 
+	# 7c. The sunken stairway down to the crypt (ruins only).
+	var stairs_down := Vector2i(-1, -1)
+	if def.has("down"):
+		_clear_area(g, 96, 22, 7, 6)
+		g[24][99] = "O"
+		stairs_down = Vector2i(99, 24)
+
 	# 8. Gates, with a small clearing around each.
 	var north_gate := Vector2i(-1, -1)
 	var south_gate := Vector2i(-1, -1)
@@ -666,6 +754,50 @@ func _generate_map(id: String) -> Dictionary:
 		"grid": g, "mobs": ms, "vendors": vs, "items": items, "altars": altars,
 		"spawn": spawn, "north_gate": north_gate, "south_gate": south_gate,
 		"west_gate": west_gate, "east_gate": east_gate,
+		"stairs_down": stairs_down, "stairs_up": Vector2i(-1, -1),
+	}
+
+# A dungeon level: solid rock with a drunkard's-walk cave carved out
+# of it. The up-stairs sit at the center (also the arrival point);
+# the treasure lies in the farthest carved corner.
+func _generate_cave(def: Dictionary, rng: RandomNumberGenerator) -> Dictionary:
+	var w: int = def["w"]
+	var h: int = def["h"]
+	var g := []
+	for y in h:
+		var row := []
+		for x in w:
+			row.append("#")
+		g.append(row)
+	var dirs := [Vector2i.UP, Vector2i.DOWN, Vector2i.LEFT, Vector2i.RIGHT]
+	var p := Vector2i(w / 2, h / 2)
+	var carved := 0
+	while carved < int(w * h * 0.34):
+		if g[p.y][p.x] == "#":
+			g[p.y][p.x] = "."
+			carved += 1
+		var step: Vector2i = dirs[rng.randi_range(0, 3)]
+		p.x = clamp(p.x + step.x, 1, w - 2)
+		p.y = clamp(p.y + step.y, 1, h - 2)
+
+	var center := Vector2i(w / 2, h / 2)
+	g[center.y][center.x] = "U"
+	var far := center
+	var best := 0
+	for y in range(1, h - 1):
+		for x in range(1, w - 1):
+			if g[y][x] == ".":
+				var d: int = abs(x - center.x) + abs(y - center.y)
+				if d > best:
+					best = d
+					far = Vector2i(x, y)
+	var items := [{ "pos": far, "id": "crown" }]
+	var ms := _spawn_mobs(g, rng, def["mobs"], w, h, center, [], 10)
+	return {
+		"grid": g, "mobs": ms, "vendors": [], "items": items, "altars": [],
+		"spawn": center, "north_gate": Vector2i(-1, -1), "south_gate": Vector2i(-1, -1),
+		"west_gate": Vector2i(-1, -1), "east_gate": Vector2i(-1, -1),
+		"stairs_down": Vector2i(-1, -1), "stairs_up": center,
 	}
 
 func _clear_area(g: Array, x0: int, y0: int, w: int, h: int) -> void:
@@ -701,9 +833,9 @@ func _place_temple(g: Array, x0: int, y0: int, altars: Array) -> void:
 	altars.append(Vector2i(x0 + 3, y0 + 2))
 	g[y0][x0 + 3] = "D"
 
-# Places counts of mobs on free grass, away from `avoid` (the player's
+# Places counts of mobs on free floor, away from `avoid` (the player's
 # entry point) and from any mob already in `existing`.
-func _spawn_mobs(g: Array, rng: RandomNumberGenerator, counts: Dictionary, w: int, h: int, avoid: Vector2i, existing: Array = []) -> Array:
+func _spawn_mobs(g: Array, rng: RandomNumberGenerator, counts: Dictionary, w: int, h: int, avoid: Vector2i, existing: Array = [], avoid_dist: int = 18) -> Array:
 	var taken := {}
 	for m in existing:
 		taken[m["pos"]] = true
@@ -716,7 +848,7 @@ func _spawn_mobs(g: Array, rng: RandomNumberGenerator, counts: Dictionary, w: in
 			var p := Vector2i(rng.randi_range(2, w - 3), rng.randi_range(2, h - 3))
 			if g[p.y][p.x] != "." or taken.has(p):
 				continue
-			if abs(p.x - avoid.x) + abs(p.y - avoid.y) < 18:
+			if abs(p.x - avoid.x) + abs(p.y - avoid.y) < avoid_dist:
 				continue
 			taken[p] = true
 			ms.append({ "pos": p, "hp": MOB_TYPES[type]["hp"], "type": type })
@@ -757,17 +889,16 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	# Middle mouse: start aiming the active spell; while aiming, it fires too.
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_MIDDLE and event.pressed:
-		if mode == Mode.PLAY and not game_over and not victory_banner and projectile.is_empty():
+		if mode == Mode.PLAY and not game_over and not victory_banner and not _shot_in_flight():
 			if targeting:
 				_try_fire_click(event.position)
 			else:
 				_begin_targeting()
 		return
-	# Right mouse cancels aiming, like Esc.
+	# Right mouse is a universal "go back": whatever Esc dismisses,
+	# it dismisses too.
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
-		if targeting:
-			_cancel_targeting()
-			_refresh()
+		_handle_right_click()
 		return
 	if event is InputEventMouseMotion and mode == Mode.OPTIONS and opt_slider_dragging:
 		_options_click(event.position, false)
@@ -811,6 +942,42 @@ func _unhandled_input(event: InputEvent) -> void:
 			_options_input(event.keycode)
 		Mode.SPELLBOOK:
 			_spellbook_input(event.keycode)
+		Mode.WORLDMAP:
+			_close_panel()
+
+# Right click mirrors Esc everywhere by forwarding KEY_ESCAPE to the
+# same per-mode handlers the keyboard uses: it closes panels, steps
+# options sub-screens back, cancels a rebind or an aimed spell, and
+# leaves the death/victory screens. The one Esc behavior it does NOT
+# copy is OPENING the options menu from plain play - a stray right
+# click popping up a menu would feel like a misfire.
+func _handle_right_click() -> void:
+	if mode == Mode.TITLE:
+		return
+	if game_over:
+		_show_title()
+		return
+	if victory_banner:
+		victory_banner = false
+		_refresh()
+		return
+	match mode:
+		Mode.PLAY:
+			if targeting:
+				_cancel_targeting()
+				_refresh()
+		Mode.INVENTORY:
+			_inventory_input(KEY_ESCAPE)
+		Mode.SHOP:
+			_shop_input(KEY_ESCAPE)
+		Mode.JOURNAL:
+			_close_panel()
+		Mode.OPTIONS:
+			_options_input(KEY_ESCAPE)
+		Mode.SPELLBOOK:
+			_spellbook_input(KEY_ESCAPE)
+		Mode.WORLDMAP:
+			_close_panel()
 
 # All left-clicks funnel through here. Movement is deliberately NOT
 # mouse-driven: clicks only operate the UI (HUD buttons and panels).
@@ -841,16 +1008,18 @@ func _handle_click(mp: Vector2) -> void:
 			_options_click(mp, true)
 		Mode.SPELLBOOK:
 			_spellbook_click(mp)
+		Mode.WORLDMAP:
+			_close_panel()
 
 # The HUD buttons. Geometry is shared with hud.gd via
 # bar_button_rects(), so drawing and hit-testing can never drift apart.
-const BAR_BUTTONS := ["Inventory (I)", "Journal (J)", "Spells (P)", "Options (O)"]
+const BAR_BUTTONS := ["Inventory (I)", "Journal (J)", "Spells (P)", "Map (M)", "Options (O)"]
 
 func bar_button_rects() -> Array:
 	var vs := get_viewport_rect().size
-	var bw := 100.0
+	var bw := 92.0
 	var bh := 26.0
-	var gap := 6.0
+	var gap := 5.0
 	var x := vs.x - (bw + gap) * BAR_BUTTONS.size() - 4.0
 	var y := vs.y - BAR_H + 50.0
 	var rects := []
@@ -860,7 +1029,7 @@ func bar_button_rects() -> Array:
 
 func _bar_click(mp: Vector2) -> bool:
 	var rects := bar_button_rects()
-	var targets := [Mode.INVENTORY, Mode.JOURNAL, Mode.SPELLBOOK, Mode.OPTIONS]
+	var targets := [Mode.INVENTORY, Mode.JOURNAL, Mode.SPELLBOOK, Mode.WORLDMAP, Mode.OPTIONS]
 	for i in rects.size():
 		if not (rects[i] as Rect2).has_point(mp):
 			continue
@@ -879,6 +1048,8 @@ func _bar_click(mp: Vector2) -> bool:
 			Mode.SPELLBOOK:
 				mode = Mode.SPELLBOOK
 				spellbook_index = SPELL_ORDER.find(active_spell)
+			Mode.WORLDMAP:
+				mode = Mode.WORLDMAP
 			Mode.OPTIONS:
 				mode = Mode.OPTIONS
 				options_screen = "main"
@@ -899,7 +1070,7 @@ func _play_input(key: int) -> void:
 			_cancel_targeting()
 			_refresh()
 		return
-	if not projectile.is_empty():
+	if _shot_in_flight():
 		return   # a shot is in flight; wait for it to land
 	if key_is("character", key):
 		mode = Mode.INVENTORY
@@ -912,6 +1083,9 @@ func _play_input(key: int) -> void:
 	elif key_is("spellbook", key):
 		mode = Mode.SPELLBOOK
 		spellbook_index = SPELL_ORDER.find(active_spell)
+		_refresh()
+	elif key_is("map", key):
+		mode = Mode.WORLDMAP
 		_refresh()
 	elif key_is("spell", key):
 		_begin_targeting()
@@ -1085,6 +1259,7 @@ func _sell_item(id: String) -> void:
 	var sp := sell_price(id)
 	_remove_item(id)
 	coins += sp
+	_sfx("coin")
 	var bb: Array = buyback.get(current_shop, [])
 	bb.push_front({ "id": id, "price": sp })
 	if bb.size() > 8:
@@ -1106,8 +1281,33 @@ func _buyback_item(idx: int) -> void:
 		return
 	coins -= e["price"]
 	_add_item(id)
+	_sfx("coin")
 	bb.remove_at(idx)
 	_log("You buy back the %s for %d coins." % [ITEMS[id]["name"], e["price"]])
+
+
+# ---------------------------------------------------------
+#  World map (M). Node positions are derived from the MAP_DEFS
+#  links, so new regions and dungeon levels lay themselves out.
+# ---------------------------------------------------------
+const WORLD_LINK_DIRS := {
+	"north": Vector2(0, -1), "south": Vector2(0, 1),
+	"east": Vector2(1, 0), "west": Vector2(-1, 0),
+	"down": Vector2(1.25, 0.55), "up": Vector2(-1.25, -0.55),
+}
+
+# id -> abstract grid position, BFS from town.
+func world_layout() -> Dictionary:
+	var pos := { "town": Vector2.ZERO }
+	var queue := ["town"]
+	while not queue.is_empty():
+		var id: String = queue.pop_front()
+		var def: Dictionary = MAP_DEFS[id]
+		for link in WORLD_LINK_DIRS:
+			if def.has(link) and not pos.has(def[link]):
+				pos[def[link]] = pos[id] + WORLD_LINK_DIRS[link]
+				queue.append(def[link])
+	return pos
 
 
 # ---------------------------------------------------------
@@ -1146,43 +1346,62 @@ func target_in_range(tile: Vector2i) -> bool:
 	var d: int = max(abs(tile.x - player_pos.x), abs(tile.y - player_pos.y))
 	return d > 0 and d <= SPELLS[active_spell]["range"] and _in_bounds(tile)
 
+# In range AND with a clear flight path (trees and walls block spells).
+func can_target(tile: Vector2i) -> bool:
+	return target_in_range(tile) and los_blocker(player_pos, tile).x < 0
+
 func _fire_at(tile: Vector2i) -> void:
 	if not target_in_range(tile):
 		_log("Out of range.")
 		_refresh()
 		return
+	if los_blocker(player_pos, tile).x >= 0:
+		_log("No clear line of fire.")
+		_refresh()
+		return
 	var sp: Dictionary = SPELLS[active_spell]
-	var kind := active_spell
-	var dmg: int = sp["dmg"]
 	player_mana -= sp["mana"]
 	_cancel_targeting()
-	var from := Vector2(player_pos) * TILE + Vector2(TILE, TILE) * 0.5
-	var to := Vector2(tile) * TILE + Vector2(TILE, TILE) * 0.5
-	projectile = {
-		"kind": kind, "from": from, "to": to, "t": 0.0, "target": tile, "dmg": dmg,
-		"dur": max(from.distance_to(to) / 700.0, 0.12),
-	}
+	_sfx("cast")
+	_spawn_projectile(active_spell, player_pos, tile, true, sp["dmg"])
 	_refresh()
 
-func _advance_projectile(delta: float) -> void:
-	projectile["t"] += delta / projectile["dur"]
+func _spawn_projectile(kind: String, from_tile: Vector2i, to_tile: Vector2i, is_player: bool, dmg: int = 0) -> void:
+	var from := Vector2(from_tile) * TILE + Vector2(TILE, TILE) * 0.5
+	var to := Vector2(to_tile) * TILE + Vector2(TILE, TILE) * 0.5
+	projectiles.append({
+		"kind": kind, "from": from, "to": to, "t": 0.0, "player": is_player,
+		"target": to_tile, "dmg": dmg,
+		"dur": max(from.distance_to(to) / 700.0, 0.12),
+	})
+
+func _shot_in_flight() -> bool:
+	for p in projectiles:
+		if p["player"]:
+			return true
+	return false
+
+func _advance_projectiles(delta: float) -> void:
 	queue_redraw()
-	if projectile["t"] < 1.0:
-		return
-	var kind: String = projectile["kind"]
-	var verb: String = {
-		"dart": "The magic dart hits", "arrow": "The bone arrow pierces",
-		"boulder": "The fire boulder scorches",
-	}[kind]
-	var noun: String = SPELLS[kind]["name"].to_lower()
-	var mi := _mob_at(projectile["target"])
-	var dmg: int = projectile["dmg"]
-	projectile = {}
-	if mi >= 0:
-		_damage_mob(mi, dmg, verb)
-	else:
-		_log("The %s hits nothing." % noun)
-	_end_turn()
+	for i in range(projectiles.size() - 1, -1, -1):
+		var p: Dictionary = projectiles[i]
+		p["t"] += delta / p["dur"]
+		if p["t"] < 1.0:
+			continue
+		projectiles.remove_at(i)
+		if not p["player"]:
+			continue   # hostile shots are visual; their damage already landed
+		var kind: String = p["kind"]
+		var verb: String = {
+			"dart": "The magic dart hits", "arrow": "The bone arrow pierces",
+			"boulder": "The fire boulder scorches",
+		}[kind]
+		var mi := _mob_at(p["target"])
+		if mi >= 0:
+			_damage_mob(mi, p["dmg"], verb)
+		else:
+			_log("The %s hits nothing." % SPELLS[kind]["name"].to_lower())
+		_end_turn()
 
 # Draws a projectile icon pointing along +x, rotated by `angle`.
 # Reused for the flying shot, the aiming cursor, the spellbook and
@@ -1247,7 +1466,8 @@ func _spellbook_click(mp: Vector2) -> void:
 
 func _set_active_spell(id: String) -> void:
 	active_spell = id
-	_log("Active spell: %s. Cast it with 5 or the middle mouse button." % SPELLS[id]["name"])
+	_log("Active spell: %s. Cast it with %s or the middle mouse button."
+			% [SPELLS[id]["name"], spell_key_label()])
 	_refresh()
 
 
@@ -1293,16 +1513,19 @@ func _damage_mob(index: int, dmg: int, verb: String) -> void:
 		mobs.remove_at(index)
 		var drop := randi_range(t["coins"][0], t["coins"][1])
 		coins += drop
+		_sfx("kill")
 		_log("You slay the %s! +%d coins." % [t["name"], drop])
 		_count_kill(mob["type"])
 		_gain_xp(t["xp"])
 	else:
+		_sfx("hit")
 		_log("%s the %s for %d. (%d HP left)" % [verb, t["name"], dmg, mob["hp"]])
 
 func _pray() -> void:
 	if player_hp < player_max_hp or player_mana < player_max_mana:
 		player_hp = player_max_hp
 		player_mana = player_max_mana
+		_sfx("quest")
 		_log("You pray at the altar. Warmth flows through you. (fully restored)")
 	else:
 		_log("You pray at the altar. The gods seem pleased.")
@@ -1316,6 +1539,7 @@ func _pickup_items() -> void:
 				continue
 			_add_item(id)
 			ground_items.remove_at(i)
+			_sfx("pickup")
 			_log("You found the %s!" % ITEMS[id]["name"])
 			_gain_xp(10)
 
@@ -1334,6 +1558,14 @@ func _check_transition() -> bool:
 	elif tile == ">" and def.has("east"):
 		_load_map(def["east"], "west_gate")
 		_log("After days of journey east, you return to %s." % MAP_DEFS[current_map]["name"])
+	elif tile == "O" and def.has("down"):
+		_load_map(def["down"], "descend")
+		_sfx("stairs")
+		_log("You descend the sunken stairway into the %s." % MAP_DEFS[current_map]["name"])
+	elif tile == "U" and def.has("up"):
+		_load_map(def["up"], "ascend")
+		_sfx("stairs")
+		_log("You climb back up to the %s." % MAP_DEFS[current_map]["name"])
 	else:
 		return false
 	_refresh()
@@ -1341,9 +1573,20 @@ func _check_transition() -> bool:
 
 func _end_turn() -> void:
 	move_count += 1
+	if move_count % 6 == 0 and player_mana < player_max_mana:
+		player_mana += 1   # slow natural mana regeneration
 	_mob_turn()
 	_update_music()
 	_refresh()
+
+func _player_died() -> bool:
+	if player_hp > 0:
+		return false
+	game_over = true
+	run_end_text = Time.get_datetime_string_from_system(false, true)
+	_sfx("death")
+	_log("You died. Press Enter to restart.")
+	return true
 
 
 # ---------------------------------------------------------
@@ -1402,6 +1645,7 @@ func _complete_quest(q: Dictionary) -> void:
 			_add_item(id, ri[id])
 			reward_bits.append("%dx %s" % [ri[id], ITEMS[id]["name"]])
 	q["state"] = "done"
+	_sfx("quest")
 	_log("Quest complete: %s! Reward: %s." % [q["desc"], ", ".join(reward_bits)])
 	_gain_xp(q["reward_xp"])
 	if q.get("opens_west", false):
@@ -1433,6 +1677,7 @@ func _check_victory() -> void:
 			return
 	victory_banner = true
 	victory_moves = move_count
+	_sfx("levelup")
 	_log("Victory! All quests complete in %d moves." % victory_moves)
 
 func _count_kill(type: String) -> void:
@@ -1455,6 +1700,7 @@ func _buy_item(id: String) -> void:
 		return
 	coins -= item["price"]
 	_add_item(id)
+	_sfx("coin")
 	if item.has("slot"):
 		_log("You buy a %s. Equip it from the inventory (I)." % item["name"])
 	else:
@@ -1468,6 +1714,7 @@ func _use_item(id: String) -> void:
 			_log("You are already at full health.")
 		else:
 			_remove_item(id)
+			_sfx("drink")
 			player_hp = min(player_hp + item["heal"], player_max_hp)
 			_log("You use the %s. (+%d HP, now %d/%d)" % [item["name"], item["heal"], player_hp, player_max_hp])
 	elif item.has("mana_heal"):
@@ -1475,6 +1722,7 @@ func _use_item(id: String) -> void:
 			_log("Your mana is already full.")
 		else:
 			_remove_item(id)
+			_sfx("drink")
 			player_mana = min(player_mana + item["mana_heal"], player_max_mana)
 			_log("You drink the %s. (+%d mana, now %d/%d)" % [item["name"], item["mana_heal"], player_mana, player_max_mana])
 	else:
@@ -1488,8 +1736,8 @@ func inventory_list() -> Array:
 
 func inv_capacity() -> int:
 	var cap := BASE_INV_SLOTS
-	if equipment.has(20):
-		var bag_item: Dictionary = ITEMS[equipment[20]]
+	if equipment.has(19):
+		var bag_item: Dictionary = ITEMS[equipment[19]]
 		cap += bag_item.get("bag_slots", 0)
 	return cap
 
@@ -1525,10 +1773,10 @@ func _equip(id: String) -> void:
 	var it: Dictionary = ITEMS[id]
 	var slot: int = it["slot"]
 	# Rings and trinkets have a second slot; use it if the first is taken.
-	if slot == 11 and equipment.has(11) and not equipment.has(12):
-		slot = 12
-	elif slot == 13 and equipment.has(13) and not equipment.has(14):
-		slot = 14
+	if slot == 10 and equipment.has(10) and not equipment.has(11):
+		slot = 11
+	elif slot == 12 and equipment.has(12) and not equipment.has(13):
+		slot = 13
 	_remove_item(id)
 	if equipment.has(slot):
 		var old: String = equipment[slot]
@@ -1544,7 +1792,7 @@ func _unequip(slot: int) -> void:
 		return
 	var id: String = equipment[slot]
 	var needs_new_stack: bool = not inventory.has(id)
-	var cap_after := BASE_INV_SLOTS if slot == 20 else inv_capacity()
+	var cap_after := BASE_INV_SLOTS if slot == 19 else inv_capacity()
 	var size_after: int = inventory.size() + (1 if needs_new_stack else 0)
 	if size_after > cap_after:
 		_log("Not enough room in your pack to remove that.")
@@ -1563,6 +1811,7 @@ func _gain_xp(amount: int) -> void:
 	while player_xp >= xp_needed():
 		player_xp -= xp_needed()
 		player_level += 1
+		_sfx("levelup")
 		base_max_hp += 3
 		base_max_mana += 2
 		if player_level % 2 == 0:
@@ -1692,10 +1941,23 @@ func _load_game() -> void:
 	for id in data["inventory"]:
 		if ITEMS.has(id):
 			inventory[id] = int(data["inventory"][id])
+	# Equipment slots are re-derived from each item's own definition
+	# rather than trusted from the file, so saves survive any
+	# renumbering of SLOT_NAMES (e.g. the removal of the Ammo slot).
 	equipment = {}
 	for slot in data["equipment"]:
-		if ITEMS.has(data["equipment"][slot]):
-			equipment[int(slot)] = data["equipment"][slot]
+		var eq_id: String = data["equipment"][slot]
+		if not ITEMS.has(eq_id):
+			continue
+		var s: int = ITEMS[eq_id]["slot"]
+		if s == 10 and equipment.has(10) and not equipment.has(11):
+			s = 11   # second ring
+		elif s == 12 and equipment.has(12) and not equipment.has(13):
+			s = 13   # second trinket
+		if equipment.has(s):
+			_add_item(eq_id)   # no slot left: back into the pack
+		else:
+			equipment[s] = eq_id
 	for i in mini(quests.size(), data["quests"].size()):
 		quests[i]["state"] = data["quests"][i]["state"]
 		quests[i]["progress"] = int(data["quests"][i]["progress"])
@@ -1744,11 +2006,11 @@ const OPT_MAIN := ["Graphics", "Sound", "Keybinds", "Save Game", "Back"]
 const REBIND_ACTIONS := ["up", "down", "left", "right",
 		"up_left", "up_right", "down_left", "down_right",
 		"wait", "character", "journal", "options",
-		"spell", "spellbook"]
+		"spell", "spellbook", "map"]
 const REBIND_LABELS := ["Move up", "Move down", "Move left", "Move right",
 		"Move up-left", "Move up-right", "Move down-left", "Move down-right",
 		"Wait", "Character sheet", "Quest journal", "Options menu",
-		"Cast spell", "Spellbook"]
+		"Cast spell", "Spellbook", "World map"]
 
 func _options_input(key: int) -> void:
 	if opt_rebinding:
@@ -1923,6 +2185,8 @@ func _load_settings() -> void:
 			keymap[a] = [v, keymap[a][1]]
 		elif typeof(v) == TYPE_ARRAY and v.size() >= 2:
 			keymap[a] = [int(v[0]), int(v[1])]
+	if keymap["spell"] == [KEY_5, KEY_KP_5]:
+		keymap["spell"] = [KEY_KP_5, KEY_NONE]   # old default; 5 was retired
 	if cf.get_value("graphics", "fullscreen", false):
 		get_window().mode = Window.MODE_FULLSCREEN
 
@@ -2004,18 +2268,30 @@ func _mob_turn() -> void:
 
 		if max(abs(diff.x), abs(diff.y)) == 1:
 			player_hp -= t["dmg"]
+			_sfx("hurt")
 			_log("The %s hits you for %d! (%d/%d HP)"
 					% [t["name"], t["dmg"], max(player_hp, 0), player_max_hp])
-			if player_hp <= 0:
-				game_over = true
-				run_end_text = Time.get_datetime_string_from_system(false, true)
-				_log("You died. Press Enter to restart.")
+			if _player_died():
 				return
 			continue
 
 		# Far-away mobs stand still; saves work on a big map.
 		if abs(diff.x) + abs(diff.y) > 40:
 			continue
+
+		# Ranged mobs shoot instead of moving when they see the player.
+		# The damage lands now; the flying shot is a visual echo.
+		if t.has("ranged"):
+			var rd: Dictionary = t["ranged"]
+			if max(abs(diff.x), abs(diff.y)) <= rd["range"] and los_blocker(mp, player_pos).x < 0:
+				player_hp -= rd["dmg"]
+				_sfx("hurt")
+				_spawn_projectile(rd["kind"], mp, player_pos, false)
+				_log("The %s %s you for %d! (%d/%d HP)"
+						% [t["name"], rd["verb"], rd["dmg"], max(player_hp, 0), player_max_hp])
+				if _player_died():
+					return
+				continue
 
 		var step := Vector2i.ZERO
 		if abs(diff.x) + abs(diff.y) <= t["sight"]:
@@ -2053,7 +2329,35 @@ func _in_bounds(p: Vector2i) -> bool:
 func _is_walkable(p: Vector2i) -> bool:
 	if not _in_bounds(p):
 		return false
-	return grid[p.y][p.x] in [".", "D", "^", "v", "<", ">"]
+	return grid[p.y][p.x] in [".", "D", "^", "v", "<", ">", "O", "U"]
+
+# Tiles that stop a projectile's flight (trees, all kinds of walls).
+const BLOCKS_FLIGHT := ["#", "T", "H", "S", "B"]
+
+# First blocking tile strictly between `from` and `to` (Bresenham),
+# or Vector2i(-1, -1) if the line is clear. The endpoints themselves
+# never block.
+func los_blocker(from: Vector2i, to: Vector2i) -> Vector2i:
+	if from == to:
+		return Vector2i(-1, -1)
+	var d := (to - from).abs()
+	var sx := 1 if to.x > from.x else -1
+	var sy := 1 if to.y > from.y else -1
+	var err := d.x - d.y
+	var p := from
+	while true:
+		var e2 := 2 * err
+		if e2 > -d.y:
+			err -= d.y
+			p.x += sx
+		if e2 < d.x:
+			err += d.x
+			p.y += sy
+		if p == to:
+			return Vector2i(-1, -1)
+		if _in_bounds(p) and grid[p.y][p.x] in BLOCKS_FLIGHT:
+			return p
+	return Vector2i(-1, -1)
 
 func _is_free(p: Vector2i) -> bool:
 	if not _is_walkable(p):
@@ -2118,10 +2422,10 @@ func _draw() -> void:
 		if view.has_point(mob["pos"]):
 			_draw_mob(mob)
 	_draw_player()
-	if not projectile.is_empty():
-		var p: Vector2 = projectile["from"].lerp(projectile["to"], clampf(projectile["t"], 0.0, 1.0))
-		var ang: float = (projectile["to"] - projectile["from"]).angle()
-		draw_projectile_icon(self, projectile["kind"], p, ang, 1.2)
+	for pr in projectiles:
+		var p: Vector2 = pr["from"].lerp(pr["to"], clampf(pr["t"], 0.0, 1.0))
+		var ang: float = (pr["to"] - pr["from"]).angle()
+		draw_projectile_icon(self, pr["kind"], p, ang, 1.2)
 
 func _draw_tile(x: int, y: int) -> void:
 	var c: String = grid[y][x]
@@ -2129,13 +2433,13 @@ func _draw_tile(x: int, y: int) -> void:
 	var r := Rect2(pos, Vector2(TILE, TILE))
 	var inner := Rect2(pos + Vector2(2, 2), Vector2(TILE - 4, TILE - 4))
 
-	draw_rect(r, Color(0.20, 0.26, 0.18))
-	draw_rect(Rect2(pos + Vector2(1, 1), Vector2(TILE - 2, TILE - 2)), Color(0.24, 0.31, 0.21))
+	draw_rect(r, pal_floor)
+	draw_rect(Rect2(pos + Vector2(1, 1), Vector2(TILE - 2, TILE - 2)), pal_floor_hi)
 
 	match c:
 		"#":
-			draw_rect(r, Color(0.38, 0.38, 0.44))
-			draw_rect(inner, Color(0.48, 0.48, 0.54))
+			draw_rect(r, pal_wall)
+			draw_rect(inner, pal_wall_hi)
 		"H":
 			draw_rect(r, Color(0.32, 0.20, 0.10))
 			draw_rect(inner, Color(0.45, 0.29, 0.15))
@@ -2180,6 +2484,15 @@ func _draw_tile(x: int, y: int) -> void:
 			draw_line(pos + Vector2(4, 6), pos + Vector2(TILE - 4, TILE - 6), Color(0.48, 0.36, 0.18), 3.0)
 			draw_line(pos + Vector2(4, TILE - 6), pos + Vector2(TILE - 4, 6), Color(0.48, 0.36, 0.18), 3.0)
 			draw_rect(Rect2(pos + Vector2(3, 13), Vector2(TILE - 6, 5)), Color(0.55, 0.42, 0.22))
+		"O", "U":
+			# stairways: shrinking steps into darkness (O, down) or
+			# widening steps toward the light (U, up)
+			draw_rect(inner, Color(0.06, 0.05, 0.08) if c == "O" else Color(0.30, 0.28, 0.34))
+			for i in 4:
+				var sw: float = TILE - 8.0 - i * 5.0
+				var step_col := Color(0.42, 0.42, 0.48).darkened(i * 0.22) if c == "O" \
+						else Color(0.30, 0.30, 0.36).lightened(i * 0.16)
+				draw_rect(Rect2(pos + Vector2((TILE - sw) * 0.5, 5.0 + i * 6.0), Vector2(sw, 5.0)), step_col)
 
 func _draw_ground_item(it: Dictionary) -> void:
 	var mid := Vector2(it["pos"]) * TILE + Vector2(TILE, TILE) * 0.5
@@ -2305,6 +2618,26 @@ func _draw_mob_icon(c: Vector2, type: String, base: Color) -> void:
 			draw_line(c + Vector2(-4.5, 5.5), c + Vector2(4.5, 5.5), base.darkened(0.4), 2.5)
 			draw_rect(Rect2(c + Vector2(-4.5, 2.8), Vector2(2, 3)), Color(0.95, 0.92, 0.82))
 			draw_rect(Rect2(c + Vector2(2.5, 2.8), Vector2(2, 3)), Color(0.95, 0.92, 0.82))
+		"a":  # goblin archer: pointed ears, headband, a bow at the side
+			draw_colored_polygon(PackedVector2Array([
+				c + Vector2(-9, -2), c + Vector2(-13, -7), c + Vector2(-7, -5)]), base.darkened(0.15))
+			draw_colored_polygon(PackedVector2Array([
+				c + Vector2(9, -2), c + Vector2(13, -7), c + Vector2(7, -5)]), base.darkened(0.15))
+			draw_rect(Rect2(c + Vector2(-6, -6.5), Vector2(12, 2.6)), Color(0.65, 0.22, 0.15))
+			draw_circle(c + Vector2(-3, -1), 1.2, Color(0.95, 0.85, 0.25))
+			draw_circle(c + Vector2(3, -1), 1.2, Color(0.95, 0.85, 0.25))
+			draw_arc(c + Vector2(6.5, 3), 4.5, -PI * 0.6, PI * 0.6, 10, Color(0.62, 0.44, 0.20), 1.6)
+			draw_line(c + Vector2(6.5, -1.5), c + Vector2(6.5, 7.5), Color(0.85, 0.83, 0.75), 0.9)
+		"y":  # wraith: hollow glowing eyes, a wispy trailing shroud
+			draw_circle(c + Vector2(0, -2), 7.0, base.lightened(0.15))
+			draw_circle(c + Vector2(-3, -3), 2.0, Color(0.75, 0.95, 1.0))
+			draw_circle(c + Vector2(3, -3), 2.0, Color(0.75, 0.95, 1.0))
+			draw_circle(c + Vector2(-3, -3), 0.9, Color(0.10, 0.15, 0.25))
+			draw_circle(c + Vector2(3, -3), 0.9, Color(0.10, 0.15, 0.25))
+			for i in 3:
+				draw_colored_polygon(PackedVector2Array([
+					c + Vector2(-6 + i * 5, 3), c + Vector2(-3.5 + i * 5, 3),
+					c + Vector2(-4.75 + i * 5, 8.5)]), base.lightened(0.1))
 
 func _draw_player() -> void:
 	var center := Vector2(player_pos) * TILE + Vector2(TILE, TILE) * 0.5
@@ -2318,14 +2651,14 @@ func draw_hero_on(ci: CanvasItem, c: Vector2, s: float) -> void:
 	var skin_sh := Color(0.76, 0.59, 0.46)
 	var hair := Color(0.42, 0.28, 0.15)
 	var pants := Color(0.30, 0.34, 0.42)
-	if equipment.has(15):  # cloak behind everything
+	if equipment.has(14):  # cloak behind everything
 		ci.draw_rect(Rect2(c + Vector2(-7, -7) * s, Vector2(14, 17) * s), Color(0.35, 0.16, 0.14))
 	ci.draw_rect(Rect2(c + Vector2(-4.5, 3) * s, Vector2(3.5, 9) * s), pants)
 	ci.draw_rect(Rect2(c + Vector2(1, 3) * s, Vector2(3.5, 9) * s), pants)
 	ci.draw_rect(Rect2(c + Vector2(-5, -5) * s, Vector2(10, 8) * s), skin)
 	ci.draw_rect(Rect2(c + Vector2(-8, -5) * s, Vector2(3, 8) * s), skin_sh)   # arms
 	ci.draw_rect(Rect2(c + Vector2(5, -5) * s, Vector2(3, 8) * s), skin_sh)
-	if equipment.has(5):   # leather armor over the torso
+	if equipment.has(4):   # leather armor over the torso
 		var leather := Color(0.46, 0.30, 0.14)
 		ci.draw_rect(Rect2(c + Vector2(-5, -5) * s, Vector2(10, 8) * s), leather)
 		ci.draw_line(c + Vector2(-5, -2) * s, c + Vector2(5, -2) * s, leather.darkened(0.35), 1.0 * s)
@@ -2338,12 +2671,17 @@ func draw_hero_on(ci: CanvasItem, c: Vector2, s: float) -> void:
 	ci.draw_circle(c + Vector2(-1.7, -10) * s, 0.6 * s, Color(0.15, 0.12, 0.10))
 	ci.draw_circle(c + Vector2(1.7, -10) * s, 0.6 * s, Color(0.15, 0.12, 0.10))
 	ci.draw_rect(Rect2(c + Vector2(-5, 2) * s, Vector2(10, 1.8) * s), Color(0.26, 0.18, 0.10))
-	if equipment.has(1):   # leather cap
-		ci.draw_rect(Rect2(c + Vector2(-5, -16) * s, Vector2(10, 3.4) * s), Color(0.45, 0.30, 0.14))
-	if equipment.has(16):  # sword in the main hand
+	if equipment.has(0):   # headgear: gold crown or leather/iron cap
+		if equipment[0] == "crown":
+			ci.draw_rect(Rect2(c + Vector2(-5, -16) * s, Vector2(10, 3.0) * s), Color(0.90, 0.75, 0.25))
+			for i in 3:
+				ci.draw_rect(Rect2(c + Vector2(-4.4 + i * 3.6, -18) * s, Vector2(1.6, 2.4) * s), Color(0.90, 0.75, 0.25))
+		else:
+			ci.draw_rect(Rect2(c + Vector2(-5, -16) * s, Vector2(10, 3.4) * s), Color(0.45, 0.30, 0.14))
+	if equipment.has(15):  # sword in the main hand
 		ci.draw_line(c + Vector2(7, 3) * s, c + Vector2(11.5, -9) * s, Color(0.75, 0.78, 0.85), 1.6 * s)
 		ci.draw_line(c + Vector2(6, -1.5) * s, c + Vector2(9.5, -0.2) * s, Color(0.45, 0.32, 0.14), 1.4 * s)
-	if equipment.has(17):  # shield on the off hand
+	if equipment.has(16):  # shield on the off hand
 		ci.draw_circle(c + Vector2(-8.5, 0) * s, 4.2 * s, Color(0.48, 0.34, 0.16))
 		ci.draw_circle(c + Vector2(-8.5, 0) * s, 4.2 * s, Color(0.28, 0.19, 0.08), false, 1.2 * s)
 
