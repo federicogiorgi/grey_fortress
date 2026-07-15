@@ -187,6 +187,7 @@ Public domain (CC0).
 - The region beyond Westmere's boarded north gate
 - Spells that interact with the environment (burning trees,
   freezing water)
+- Fog of war and explored-map reveal mechanisms
 - Random item drops from mobs (potions, gear with rolled stats)
 - A repeatable quest or two after victory, so late runs have goals
 - Steam integration (achievements, cloud saves)
