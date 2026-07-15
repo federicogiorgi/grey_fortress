@@ -1,25 +1,25 @@
 extends Node2D
 # =============================================================
-#  GREY FORTRESS - v8
+#  GREY FORTRESS - v9
 #
 #  New in this version:
-#   - The minimap shows the actual terrain of the current area
-#     only (a cached texture); M opens the world map, whose
-#     layout derives from the MAP_DEFS links, ready for future
-#     regions and dungeons
-#   - The first dungeon: the Sunken Crypt, a cave carved under
-#     the Ancient Ruins (stairway near its east side), haunted
-#     by skeletons and wraiths and hiding the Sunken Crown
-#   - Trees and walls block spell flight (Bresenham line of
-#     sight); the aim line shows whether the shot is clear
-#   - Ranged mobs: goblin archers (forest, ruins) shoot arrows,
-#     wraiths (crypt) hex from afar - both respect line of sight
-#   - Mana slowly regenerates while adventuring (1 per 6 turns)
-#   - Synthesized sound effects for combat, items, magic,
-#     trading, quests, stairs and dying (tools/make_sfx.py)
-#   - The top-row 5 is no longer a default cast key (numpad 5
-#     and middle mouse remain); tree densities retuned per map
+#   - Westmere's eight vendors are real now: each has a shop
+#     (two item tiers, like the town's) and a quest, bringing
+#     the quest total to twelve. Their wares fill the equipment
+#     slots that used to be empty: Shirt, Neck, Gloves, Tabard
+#     and Ranged (wands)
+#   - Spell damage as a stat: wands sold by Odo the fletcher
+#     occupy the Ranged slot and add +1/+2 damage to every
+#     spell; the spellbook and character sheet show the bonus
+#   - A second dungeon level: Bone Hollow, carved even deeper
+#     below the Sunken Crypt, patrolled by bone knights (a new
+#     heavy melee mob) and hiding the Runeblade (+3 damage)
+#   - Cave generation is fully data-driven now: any cave def
+#     can name its treasure ("loot") and can link further
+#     "down", so a third level is one MAP_DEFS entry away
 #
+#  v8: area minimap + world map, the Sunken Crypt, spell/mob
+#  line of sight, ranged mobs, mana regen, sound effects.
 #  v7: three spells + spellbook + targeting + projectiles + mana
 #  potions + HP bars; ranged weapons came and went; dual keybinds.
 #  v6: title screen, save/load, death details, Westmere Village.
@@ -77,15 +77,26 @@ const MAP_DEFS := {
 		"w": 50, "h": 36, "tint": Color(0.36, 0.42, 0.30),
 		"tree_density": 0.035, "water_blobs": 0, "mobs": {},
 	},
-	# The first dungeon: a cave carved under the Ancient Ruins,
+	# The first dungeon level: a cave carved under the Ancient Ruins,
 	# reached by the sunken stairway ("O" tile) near its east side.
+	# "loot" is the unique item hidden in the cave's farthest corner.
 	"crypt": {
-		"name": "Sunken Crypt", "up": "ruins", "music": "ruins",
+		"name": "Sunken Crypt", "up": "ruins", "down": "crypt2", "music": "ruins",
 		"w": 60, "h": 44, "tint": Color(0.18, 0.15, 0.22),
-		"tree_density": 0.0, "water_blobs": 0, "cave": true,
+		"tree_density": 0.0, "water_blobs": 0, "cave": true, "loot": "crown",
 		"palette": { "floor": Color(0.16, 0.14, 0.19), "floor_hi": Color(0.20, 0.17, 0.23),
 				"wall": Color(0.10, 0.09, 0.13), "wall_hi": Color(0.15, 0.13, 0.18) },
 		"mobs": { "s": 10, "y": 6 },
+	},
+	# The second dungeon level, deeper and deadlier: bone knights
+	# patrol it and the Runeblade lies in its farthest corner.
+	"crypt2": {
+		"name": "Bone Hollow", "up": "crypt", "music": "ruins",
+		"w": 70, "h": 52, "tint": Color(0.24, 0.15, 0.13),
+		"tree_density": 0.0, "water_blobs": 0, "cave": true, "loot": "runeblade",
+		"palette": { "floor": Color(0.19, 0.13, 0.12), "floor_hi": Color(0.23, 0.16, 0.14),
+				"wall": Color(0.12, 0.08, 0.08), "wall_hi": Color(0.17, 0.12, 0.11) },
+		"mobs": { "s": 12, "y": 7, "k": 5 },
 	},
 }
 
@@ -125,6 +136,8 @@ const MOB_TYPES := {
 	"y": { "name": "wraith",    "hp": 5,  "dmg": 2, "sight": 11, "xp": 20,
 			"coins": [6, 12],  "color": Color(0.55, 0.60, 0.75),
 			"ranged": { "dmg": 2, "range": 5, "kind": "dart", "verb": "hexes" } },
+	"k": { "name": "bone knight", "hp": 12, "dmg": 3, "sight": 8, "xp": 30,
+			"coins": [12, 20], "color": Color(0.52, 0.52, 0.58) },
 }
 
 # Vendor stock comes in two tiers per item type: the second tier is
@@ -169,6 +182,44 @@ const ITEMS := {
 			"desc": "+8 inventory slots" },
 	"lbag":   { "name": "Traveler's Pack",  "price": 45, "slot": 19, "bag_slots": 14,
 			"desc": "+14 inventory slots" },
+	# Westmere wares: they fill the slots the town leaves empty
+	# (Shirt, Neck, Gloves, Tabard, Ranged) and add spell damage.
+	"shirt":  { "name": "Linen Shirt",      "price": 12, "slot": 3,  "hp": 2,
+			"desc": "+2 max HP" },
+	"sshirt": { "name": "Silk Shirt",       "price": 34, "slot": 3,  "hp": 4,
+			"desc": "+4 max HP" },
+	"tabard": { "name": "Westmere Tabard",  "price": 26, "slot": 18, "hp": 3,
+			"desc": "+3 max HP" },
+	"sausage": { "name": "Pork Sausage",    "price": 8,  "heal": 7,
+			"desc": "Restores 7 HP" },
+	"ham":    { "name": "Smoked Ham",       "price": 18, "heal": 16,
+			"desc": "Restores 16 HP" },
+	"salve":  { "name": "Herbal Salve",     "price": 15, "heal": 12,
+			"desc": "Restores 12 HP" },
+	"tonic":  { "name": "Bitterroot Tonic", "price": 8,  "mana_heal": 6,
+			"desc": "Restores 6 mana" },
+	"chain":  { "name": "Chainmail",        "price": 45, "slot": 4,  "hp": 6,
+			"desc": "+6 max HP" },
+	"plate":  { "name": "Platemail",        "price": 95, "slot": 4,  "hp": 9,
+			"desc": "+9 max HP" },
+	"gauntlets": { "name": "Iron Gauntlets", "price": 30, "slot": 9, "hp": 3,
+			"desc": "+3 max HP" },
+	"pendant": { "name": "Jade Pendant",    "price": 30, "slot": 1,  "hp": 3,
+			"desc": "+3 max HP" },
+	"amulet": { "name": "Sapphire Amulet",  "price": 75, "slot": 1,  "hp": 4, "mana": 4,
+			"desc": "+4 max HP, +4 max mana" },
+	"gring":  { "name": "Gold Ring",        "price": 45, "slot": 10, "hp": 3,
+			"desc": "+3 max HP" },
+	"wand":   { "name": "Oak Wand",         "price": 40, "slot": 17, "spell_dmg": 1,
+			"desc": "+1 spell damage" },
+	"bwand":  { "name": "Bone Wand",        "price": 95, "slot": 17, "spell_dmg": 2,
+			"desc": "+2 spell damage" },
+	"ale":    { "name": "Honey Ale",        "price": 6,  "heal": 5,
+			"desc": "Restores 5 HP" },
+	"gmpotion": { "name": "Greater Mana Potion", "price": 28, "mana_heal": 16,
+			"desc": "Restores 16 mana" },
+	"pie":    { "name": "Meat Pie",         "price": 15, "heal": 14,
+			"desc": "Restores 14 HP" },
 	"relic":  { "name": "Sunstone Relic",   "price": 0,
 			"desc": "Quest item, warm to the touch" },
 	"armor":  { "name": "Leather Armor",    "price": 0, "slot": 4,  "hp": 4,
@@ -181,6 +232,8 @@ const ITEMS := {
 			"desc": "+9 max HP" },
 	"crown":  { "name": "Sunken Crown",      "price": 0, "slot": 0,  "hp": 10,
 			"desc": "+10 max HP" },
+	"runeblade": { "name": "Runeblade",      "price": 0, "slot": 15, "dmg": 3,
+			"desc": "+3 damage" },
 }
 
 # World-of-Warcraft-style equipment slots, in canonical order.
@@ -228,26 +281,86 @@ const VENDORS := [
 	},
 ]
 
-# Westmere's eight vendors are stubs for now: they greet you, but
-# their shops and quests come with a later version.
+# Westmere's eight vendors. Together with the town's four they share
+# one global index space (town first, then these) that keys quests[],
+# buyback{} and current_shop; see vendor_def().
 const WEST_VENDORS := [
-	{ "name": "Wren the weaver",    "short": "Wren",  "symbol": "bag",
-			"greet": "Wren: Finest cloth west of the fortress... once my loom is fixed." },
-	{ "name": "Tobin the butcher",  "short": "Tobin", "symbol": "bread",
-			"greet": "Tobin: Nothing to sell yet. The pigs got away." },
-	{ "name": "Mira the herbalist", "short": "Mira",  "symbol": "flask",
-			"greet": "Mira: Still gathering herbs. Come back another season." },
-	{ "name": "Galt the armorer",   "short": "Galt",  "symbol": "anvil",
-			"greet": "Galt: Forge is cold. Ask me again when the coal arrives." },
-	{ "name": "Sela the jeweler",   "short": "Sela",  "symbol": "bag",
-			"greet": "Sela: Gems, soon. The caravan is late." },
-	{ "name": "Odo the fletcher",   "short": "Odo",   "symbol": "anvil",
-			"greet": "Odo: No arrows today. The geese are on strike." },
-	{ "name": "Ivy the brewer",     "short": "Ivy",   "symbol": "flask",
-			"greet": "Ivy: The first batch is still fermenting." },
-	{ "name": "Pell the baker",     "short": "Pell",  "symbol": "bread",
-			"greet": "Pell: Oven's not built yet. Alda sends her regards." },
+	{
+		"name": "Wren the weaver",    "short": "Wren",  "symbol": "bag",
+		"stock": ["shirt", "sshirt", "tabard"],
+		"greet": "Wren: Finest cloth west of the fortress.",
+		"quest": { "desc": "Kill 4 wolves", "type": "kill", "target": "w", "need": 4,
+				"intro": "My looms want wool, but the wolves in the Dark Forest have gotten bold. Cull 4 of them?",
+				"reward_coins": 30, "reward_xp": 20 },
+	},
+	{
+		"name": "Tobin the butcher",  "short": "Tobin", "symbol": "bread",
+		"stock": ["sausage", "ham"],
+		"greet": "Tobin: Best cuts this side of the mountains.",
+		"quest": { "desc": "Kill 3 wild boars", "type": "kill", "target": "b", "need": 3,
+				"intro": "The boars in the Northern Wilds trampled my pens. Bring down 3 and the smokehouse pays you back.",
+				"reward_items": { "ham": 2 }, "reward_xp": 20 },
+	},
+	{
+		"name": "Mira the herbalist", "short": "Mira",  "symbol": "flask",
+		"stock": ["salve", "tonic"],
+		"greet": "Mira: Every ailment has its herb.",
+		"quest": { "desc": "Bring 2 Healing Potions", "type": "item", "target": "potion", "need": 2,
+				"intro": "My whole shelf of potions spoiled in the damp. Bring me 2 Healing Potions to restock?",
+				"reward_items": { "gpotion": 2 }, "reward_xp": 25 },
+	},
+	{
+		"name": "Galt the armorer",   "short": "Galt",  "symbol": "anvil",
+		"stock": ["chain", "plate", "gauntlets"],
+		"greet": "Galt: Good armor is cheaper than a funeral.",
+		"quest": { "desc": "Kill 2 trolls", "type": "kill", "target": "t", "need": 2,
+				"intro": "They say troll hide turns my best steel. Fell 2 trolls in the Ancient Ruins and prove them wrong.",
+				"reward_coins": 50, "reward_xp": 35 },
+	},
+	{
+		"name": "Sela the jeweler",   "short": "Sela",  "symbol": "bag",
+		"stock": ["pendant", "amulet", "gring"],
+		"greet": "Sela: Gems from the caravan, fresh this week.",
+		"quest": { "desc": "Bring me 30 coins", "type": "coins", "need": 30,
+				"intro": "The caravan finally came - and emptied my coffers. Invest 30 coins and keep the first piece I finish?",
+				"reward_items": { "gring": 1 }, "reward_xp": 30 },
+	},
+	{
+		"name": "Odo the fletcher",   "short": "Odo",   "symbol": "anvil",
+		"stock": ["wand", "bwand"],
+		"greet": "Odo: Arrows are out of fashion. Wands, now...",
+		"quest": { "desc": "Kill 6 skeletons", "type": "kill", "target": "s", "need": 6,
+				"intro": "Nobody buys arrows anymore, so I carve wands. Good bone is scarce - shatter 6 skeletons for me?",
+				"reward_coins": 40, "reward_xp": 30 },
+	},
+	{
+		"name": "Ivy the brewer",     "short": "Ivy",   "symbol": "flask",
+		"stock": ["ale", "gmpotion"],
+		"greet": "Ivy: The good barrel is always the next one.",
+		"quest": { "desc": "Bring me 15 coins", "type": "coins", "need": 15,
+				"intro": "The first batch needs better barrels than I can afford. Spare 15 coins for the cause?",
+				"reward_items": { "gmpotion": 2 }, "reward_xp": 20 },
+	},
+	{
+		"name": "Pell the baker",     "short": "Pell",  "symbol": "bread",
+		"stock": ["bread", "pie"],
+		"greet": "Pell: The oven is finally lit. Alda sends her regards.",
+		"quest": { "desc": "Bring 3 Fresh Bread", "type": "item", "target": "bread", "need": 3,
+				"intro": "I must know what Alda puts in her dough. Bring me 3 of her Fresh Bread to compare?",
+				"reward_items": { "pie": 2 }, "reward_xp": 15 },
+	},
 ]
+
+# All vendors share one global index space: the town's four first,
+# then Westmere's eight. quests[] is built in this order, and
+# current_shop / buyback{} use the same indices.
+func vendor_def(gidx: int) -> Dictionary:
+	if gidx < VENDORS.size():
+		return VENDORS[gidx]
+	return WEST_VENDORS[gidx - VENDORS.size()]
+
+func vendor_total() -> int:
+	return VENDORS.size() + WEST_VENDORS.size()
 
 # ---- state -------------------------------------------------
 var mode: int = Mode.PLAY
@@ -263,6 +376,7 @@ var player_pos := Vector2i.ZERO
 var player_hp := 12
 var player_max_hp := 12   # computed: base + equipment
 var player_dmg := 1       # computed: base + equipment
+var player_spell_dmg := 0 # computed: equipment only (wands)
 var base_max_hp := 12
 var base_dmg := 1
 var player_mana := 10
@@ -444,7 +558,8 @@ func _start() -> void:
 	messages = []
 	map_state = {}
 	quests = []
-	for vd in VENDORS:
+	for i in vendor_total():
+		var vd := vendor_def(i)
 		var q: Dictionary = vd["quest"].duplicate()
 		q["state"] = "hidden"
 		q["progress"] = 0
@@ -759,7 +874,9 @@ func _generate_map(id: String) -> Dictionary:
 
 # A dungeon level: solid rock with a drunkard's-walk cave carved out
 # of it. The up-stairs sit at the center (also the arrival point);
-# the treasure lies in the farthest carved corner.
+# the treasure named by the def's "loot" lies in the farthest carved
+# corner, and a def with a "down" link gets a stairway placed far
+# from both the entrance and the treasure.
 func _generate_cave(def: Dictionary, rng: RandomNumberGenerator) -> Dictionary:
 	var w: int = def["w"]
 	var h: int = def["h"]
@@ -791,13 +908,27 @@ func _generate_cave(def: Dictionary, rng: RandomNumberGenerator) -> Dictionary:
 				if d > best:
 					best = d
 					far = Vector2i(x, y)
-	var items := [{ "pos": far, "id": "crown" }]
+	var items := [{ "pos": far, "id": def["loot"] }]
+	var stairs_down := Vector2i(-1, -1)
+	if def.has("down"):
+		# the carved tile whose NEARER of (entrance, treasure) is farthest
+		best = -1
+		for y in range(1, h - 1):
+			for x in range(1, w - 1):
+				if g[y][x] != ".":
+					continue
+				var d: int = mini(abs(x - center.x) + abs(y - center.y),
+						abs(x - far.x) + abs(y - far.y))
+				if d > best:
+					best = d
+					stairs_down = Vector2i(x, y)
+		g[stairs_down.y][stairs_down.x] = "O"
 	var ms := _spawn_mobs(g, rng, def["mobs"], w, h, center, [], 10)
 	return {
 		"grid": g, "mobs": ms, "vendors": [], "items": items, "altars": [],
 		"spawn": center, "north_gate": Vector2i(-1, -1), "south_gate": Vector2i(-1, -1),
 		"west_gate": Vector2i(-1, -1), "east_gate": Vector2i(-1, -1),
-		"stairs_down": Vector2i(-1, -1), "stairs_up": center,
+		"stairs_down": stairs_down, "stairs_up": center,
 	}
 
 func _clear_area(g: Array, x0: int, y0: int, w: int, h: int) -> void:
@@ -1165,7 +1296,7 @@ func _shop_input(key: int) -> void:
 		return
 	if key >= KEY_1 and key <= KEY_9:
 		var idx := key - KEY_1
-		var stock: Array = VENDORS[current_shop]["stock"]
+		var stock: Array = vendor_def(current_shop)["stock"]
 		if idx < stock.size():
 			_buy_item(stock[idx])
 		return
@@ -1194,7 +1325,7 @@ const SHOP_ROW_H := 20.0
 
 func shop_entries() -> Array:
 	var entries := []
-	var vd: Dictionary = VENDORS[current_shop]
+	var vd: Dictionary = vendor_def(current_shop)
 	entries.append({ "kind": "header", "text": "Buy" })
 	var stock: Array = vd["stock"]
 	for i in stock.size():
@@ -1363,7 +1494,7 @@ func _fire_at(tile: Vector2i) -> void:
 	player_mana -= sp["mana"]
 	_cancel_targeting()
 	_sfx("cast")
-	_spawn_projectile(active_spell, player_pos, tile, true, sp["dmg"])
+	_spawn_projectile(active_spell, player_pos, tile, true, sp["dmg"] + player_spell_dmg)
 	_refresh()
 
 func _spawn_projectile(kind: String, from_tile: Vector2i, to_tile: Vector2i, is_player: bool, dmg: int = 0) -> void:
@@ -1594,14 +1725,11 @@ func _player_died() -> bool:
 # ---------------------------------------------------------
 func _talk_to_vendor(index: int) -> void:
 	var v = vendors[index]
+	var gidx: int = v["set_idx"]
 	if v.get("set", "town") == "west":
-		# Westmere vendors are stubs: a greeting, no shop, no quest.
-		_log(WEST_VENDORS[v["set_idx"] % WEST_VENDORS.size()]["greet"])
-		_refresh()
-		return
-	var set_idx: int = v["set_idx"]
-	var data: Dictionary = VENDORS[set_idx % VENDORS.size()]
-	var q: Dictionary = quests[set_idx % quests.size()]
+		gidx += VENDORS.size()   # Westmere vendors follow the town's
+	var data: Dictionary = vendor_def(gidx)
+	var q: Dictionary = quests[gidx % quests.size()]
 
 	if q["state"] == "hidden":
 		q["state"] = "active"
@@ -1614,7 +1742,7 @@ func _talk_to_vendor(index: int) -> void:
 	else:
 		_log(data["greet"])
 
-	current_shop = set_idx % VENDORS.size()
+	current_shop = gidx
 	shop_index = 0
 	mode = Mode.SHOP
 	_refresh()
@@ -1757,11 +1885,13 @@ func _pack_has_room(id: String) -> bool:
 
 func _recalc_stats() -> void:
 	player_dmg = base_dmg
+	player_spell_dmg = 0
 	var bonus_hp := 0
 	var bonus_mana := 0
 	for slot in equipment:
 		var it: Dictionary = ITEMS[equipment[slot]]
 		player_dmg += it.get("dmg", 0)
+		player_spell_dmg += it.get("spell_dmg", 0)
 		bonus_hp += it.get("hp", 0)
 		bonus_mana += it.get("mana", 0)
 	player_max_hp = base_max_hp + bonus_hp
@@ -2628,6 +2758,16 @@ func _draw_mob_icon(c: Vector2, type: String, base: Color) -> void:
 			draw_circle(c + Vector2(3, -1), 1.2, Color(0.95, 0.85, 0.25))
 			draw_arc(c + Vector2(6.5, 3), 4.5, -PI * 0.6, PI * 0.6, 10, Color(0.62, 0.44, 0.20), 1.6)
 			draw_line(c + Vector2(6.5, -1.5), c + Vector2(6.5, 7.5), Color(0.85, 0.83, 0.75), 0.9)
+		"k":  # bone knight: a skull under a dark helm, ember-red eyes
+			draw_circle(c + Vector2(0, 0.5), 6.5, Color(0.90, 0.89, 0.82))
+			draw_rect(Rect2(c + Vector2(-7, -8.5), Vector2(14, 6)), Color(0.28, 0.28, 0.34))
+			draw_rect(Rect2(c + Vector2(-8, -4), Vector2(2.6, 6)), Color(0.28, 0.28, 0.34))
+			draw_rect(Rect2(c + Vector2(5.4, -4), Vector2(2.6, 6)), Color(0.28, 0.28, 0.34))
+			draw_rect(Rect2(c + Vector2(-1.2, -10.5), Vector2(2.4, 3)), Color(0.65, 0.18, 0.14))
+			draw_circle(c + Vector2(-2.7, -0.5), 1.5, Color(0.85, 0.25, 0.12))
+			draw_circle(c + Vector2(2.7, -0.5), 1.5, Color(0.85, 0.25, 0.12))
+			for i in 3:
+				draw_line(c + Vector2(-2.4 + i * 2.4, 3.8), c + Vector2(-2.4 + i * 2.4, 6.6), dark, 0.9)
 		"y":  # wraith: hollow glowing eyes, a wispy trailing shroud
 			draw_circle(c + Vector2(0, -2), 7.0, base.lightened(0.15))
 			draw_circle(c + Vector2(-3, -3), 2.0, Color(0.75, 0.95, 1.0))
@@ -2684,6 +2824,9 @@ func draw_hero_on(ci: CanvasItem, c: Vector2, s: float) -> void:
 	if equipment.has(16):  # shield on the off hand
 		ci.draw_circle(c + Vector2(-8.5, 0) * s, 4.2 * s, Color(0.48, 0.34, 0.16))
 		ci.draw_circle(c + Vector2(-8.5, 0) * s, 4.2 * s, Color(0.28, 0.19, 0.08), false, 1.2 * s)
+	if equipment.has(17):  # wand tucked into the belt
+		ci.draw_line(c + Vector2(-4, 2.5) * s, c + Vector2(-8, -4.5) * s, Color(0.58, 0.40, 0.18), 1.5 * s)
+		ci.draw_circle(c + Vector2(-8, -4.5) * s, 1.3 * s, Color(0.65, 0.75, 1.0))
 
 func _draw_glyph(center: Vector2, ch: String, col: Color) -> void:
 	var size := 16

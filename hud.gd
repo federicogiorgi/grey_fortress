@@ -434,6 +434,9 @@ func _draw_panel_character() -> void:
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.85, 0.7, 0.6))
 	draw_string(font, Vector2(p.x + 356, p.y + 270), "HP %d/%d" % [max(game.player_hp, 0), game.player_max_hp],
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.7, 0.85, 0.7))
+	if game.player_spell_dmg > 0:
+		draw_string(font, Vector2(p.x + 356, p.y + 290), "Spell +%d" % game.player_spell_dmg,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.65, 0.72, 0.92))
 
 	for i in game.SLOT_NAMES.size():
 		var yy : int = top + i * row_h
@@ -503,8 +506,10 @@ func _draw_panel_spellbook() -> void:
 		draw_string(font, row.position + Vector2(54, 20), name_text,
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 15,
 				Color(0.95, 0.88, 0.60) if id == game.active_spell else Color(0.88, 0.88, 0.92))
+		var dmg_text := str(sp["dmg"]) if game.player_spell_dmg == 0 \
+				else "%d+%d" % [sp["dmg"], game.player_spell_dmg]
 		draw_string(font, row.position + Vector2(54, 38),
-				"%d mana, %d damage, range %d - %s" % [sp["mana"], sp["dmg"], sp["range"], sp["desc"]],
+				"%d mana, %s damage, range %d - %s" % [sp["mana"], dmg_text, sp["range"], sp["desc"]],
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.62, 0.62, 0.68))
 	draw_string(font, Vector2(p.x + 16, p.y + h - 16),
 			"Click a spell (or Up/Down + Enter) to make it the active one. Esc or right click closes.",
@@ -584,7 +589,7 @@ func _draw_panel_journal() -> void:
 # Row geometry comes from the SHOP_* constants shared with
 # _shop_click in main.gd.
 func _draw_panel_shop() -> void:
-	var vd: Dictionary = game.VENDORS[game.current_shop]
+	var vd: Dictionary = game.vendor_def(game.current_shop)
 	var entries: Array = game.shop_entries()
 	var w: float = game.SHOP_W
 	var h: float = 96.0 + entries.size() * game.SHOP_ROW_H

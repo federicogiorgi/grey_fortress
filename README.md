@@ -61,11 +61,18 @@ Movement is keyboard-only; the mouse operates the UI.
    end, and a sunken stairway near the east side leads underground
 5. Sunken Crypt: the first dungeon — a dark cave carved beneath the
    ruins, haunted by skeletons and hexing wraiths, with the Sunken
-   Crown (+10 max HP) hidden in its farthest corner
-6. Westmere Village (west of town, unlocked by the Sunstone Relic
-   quest): larger than town, eight vendors (stubs for now — shops
-   and quests come later), a temple at the bottom, and a boarded-up
-   north gate to a future region (work in progress)
+   Crown (+10 max HP) hidden in its farthest corner and a second
+   stairway leading even deeper
+6. Bone Hollow: the second dungeon level, deeper and deadlier —
+   bone knights patrol it alongside the dead of the crypt above,
+   and the Runeblade (+3 damage) lies in its farthest corner
+7. Westmere Village (west of town, unlocked by the Sunstone Relic
+   quest): larger than town, eight vendors each with a real shop
+   and a quest of their own; their wares fill the equipment slots
+   the town leaves empty (shirts, necklaces, gauntlets, a tabard),
+   and Odo the fletcher sells wands that add spell damage. A temple
+   at the bottom, and a boarded-up north gate to a future region
+   (work in progress)
 
 A winding road connects the south and north gates of every surface
 map, so you can never be walled in by the procedural generation.
@@ -87,6 +94,9 @@ its entrance tile.
   (7 mana, 5 damage, range 5); projectiles animate to the target,
   rotated to point at it (spells only hit monsters for now;
   interacting with the environment is planned)
+- Spell damage as a stat: wands (sold by Odo in Westmere) occupy
+  the Ranged slot and add +1/+2 damage to every spell; the
+  spellbook and character sheet show the bonus
 - Line of sight: trees and walls block spell flight, for you and
   for the enemy
 - Ranged mobs: goblin archers shoot arrows and wraiths hex from
@@ -109,22 +119,26 @@ its entrance tile.
 - Two item tiers per vendor: every item type has a pricier, stronger
   variant (e.g. Iron Sword +1 dmg for 25c, Steel Sword +2 dmg for
   60c); the unique loot hidden in the world outposts (Scout's Boots,
-  Hunter's Belt, Ancient Legplates) outclasses everything in shops
+  Hunter's Belt, Ancient Legplates) and the dungeons (Sunken Crown,
+  Runeblade) outclasses everything in shops
 - Weather: entering an area has a 10% chance of rain — a cozy
   synthesized rain loop with animated streaks, plus occasional
   distant lightning (thunder rumble and a brief screen flash)
-- Quests: each vendor gives one on first talk; return when done
-  (kill 5 rats, kill 3 goblins, bring 10 coins, fetch the relic);
-  the relic quest rewards Leather Armor (+4 max HP, chest slot,
-  drawn on the hero) and opens the west gate of town
+- Quests: every vendor gives one on first talk; return when done.
+  The town's four (kill 5 rats, kill 3 goblins, bring 10 coins,
+  fetch the relic) are joined by Westmere's eight (wolves, boars,
+  trolls, skeletons, potions and bread to fetch, coins to invest),
+  twelve in all; the relic quest rewards Leather Armor (+4 max HP,
+  chest slot, drawn on the hero) and opens the west gate of town
 - Save / load: "Save Game" in the options menu writes
   user://save.json; "Continue" on the title screen restores it
   (the world regenerates deterministically, so only the dynamic
   state — player, quests, surviving mobs, remaining loot — is saved)
 - Death screen: shows when the run began and ended, steps taken,
   and the level you reached
-- Victory: finishing all four quests shows a "Victory!" screen with
-  the number of moves the run took; you can keep exploring after
+- Victory: finishing all twelve quests shows a "Victory!" screen
+  with the number of moves the run took; you can keep exploring
+  after
 - Temple altar: full heal, free, the only healing besides food/potions
 - Per-map persistence with respawns: each time you re-enter a map,
   half of the slain mobs (per type, rounded up) come back, placed
@@ -149,6 +163,9 @@ its entrance tile.
   so the world is identical every run
 - Mob types, items, vendors and quests are data dictionaries;
   extending content means adding entries, not code
+- `tools/smoke_test.gd`: headless sanity checks over the data
+  tables and map generation — run with
+  `godot --headless -s tools/smoke_test.gd` from the project dir
 
 ## Music
 
@@ -166,8 +183,10 @@ Public domain (CC0).
 
 ## Next steps
 
-- More dungeon levels below the Sunken Crypt
-- Real shops and quests for the eight Westmere vendors
+- A third dungeon level below Bone Hollow, with a boss guarding it
 - The region beyond Westmere's boarded north gate
-- Spells that interact with the environment
+- Spells that interact with the environment (burning trees,
+  freezing water)
+- Random item drops from mobs (potions, gear with rolled stats)
+- A repeatable quest or two after victory, so late runs have goals
 - Steam integration (achievements, cloud saves)
