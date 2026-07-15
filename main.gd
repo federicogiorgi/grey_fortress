@@ -44,9 +44,11 @@ const MAP_DEFS := {
 	"town": {
 		# The west gate exists in the def but its "<" tiles are only
 		# carved into the map once the Sunstone Relic quest is done.
+		# Villages are "no_fog": their minimap is fully drawn from the
+		# start; everywhere else fog of war hides the unseen parts.
 		"name": "Grey Fortress Town", "north": "wilds", "west": "west", "music": "town",
 		"w": 42, "h": 30, "tint": Color(0.36, 0.42, 0.30),
-		"tree_density": 0.040, "water_blobs": 0, "mobs": {},
+		"tree_density": 0.040, "water_blobs": 0, "mobs": {}, "no_fog": true,
 	},
 	"wilds": {
 		"name": "Northern Wilds", "south": "town", "north": "forest", "music": "wilds",
@@ -59,6 +61,8 @@ const MAP_DEFS := {
 		"name": "Dark Forest", "south": "wilds", "north": "ruins", "music": "forest",
 		"w": 125, "h": 94, "tint": Color(0.14, 0.29, 0.15),
 		"tree_density": 0.115, "water_blobs": 2,
+		# darker ground, matching the deep green of its minimap tint
+		"palette": { "floor": Color(0.14, 0.22, 0.13), "floor_hi": Color(0.17, 0.26, 0.16) },
 		"mobs": { "w": 9, "g": 8, "b": 6, "a": 5 },
 		"outpost": { "x": 88, "y": 50, "item": "belt" },
 	},
@@ -66,6 +70,8 @@ const MAP_DEFS := {
 		"name": "Ancient Ruins", "south": "forest", "down": "crypt", "music": "ruins",
 		"w": 125, "h": 94, "tint": Color(0.33, 0.34, 0.39),
 		"tree_density": 0.024, "water_blobs": 1, "ruin_walls": true,
+		# grey, dusty ground: old stone showing through thin grass
+		"palette": { "floor": Color(0.25, 0.27, 0.24), "floor_hi": Color(0.29, 0.31, 0.28) },
 		"mobs": { "s": 14, "g": 6, "t": 4, "a": 4 },
 		"outpost": { "x": 28, "y": 58, "item": "legplates" },
 	},
@@ -75,7 +81,7 @@ const MAP_DEFS := {
 	"west": {
 		"name": "Westmere Village", "east": "town", "music": "town",
 		"w": 50, "h": 36, "tint": Color(0.36, 0.42, 0.30),
-		"tree_density": 0.035, "water_blobs": 0, "mobs": {},
+		"tree_density": 0.035, "water_blobs": 0, "mobs": {}, "no_fog": true,
 	},
 	# The first dungeon level: a cave carved under the Ancient Ruins,
 	# reached by the sunken stairway ("O" tile) near its east side.
@@ -577,8 +583,46 @@ func _refresh() -> void:
 	# get_screen_center_position(), which is stale until the camera
 	# scroll updates (visible as a grey world after a map transition).
 	camera.force_update_scroll()
+	_mark_explored()
 	queue_redraw()
 	hud.queue_redraw()
+
+# Fog of war: every tile the camera has actually shown is marked in
+# the map's "explored" grid, and stays revealed forever (the grid is
+# part of the save). The minimap draws fog over the rest. Villages
+# ("no_fog") are always fully drawn.
+func _mark_explored() -> void:
+	if grid.is_empty() or MAP_DEFS[current_map].get("no_fog", false):
+		return
+	var expl: Array = map_state[current_map]["explored"]
+	var vsize := get_viewport_rect().size
+	var topleft := camera.get_screen_center_position() - vsize * 0.5
+	var mw: int = grid[0].size()
+	var mh: int = grid.size()
+	var x0: int = clamp(int(floor(topleft.x / TILE)), 0, mw - 1)
+	var y0: int = clamp(int(floor(topleft.y / TILE)), 0, mh - 1)
+	var x1: int = clamp(int(ceil((topleft.x + vsize.x) / TILE)), 0, mw - 1)
+	# the strip behind the HUD bar is not actually visible
+	var y1: int = clamp(int(ceil((topleft.y + vsize.y - BAR_H) / TILE)), 0, mh - 1)
+	var changed := false
+	for y in range(y0, y1 + 1):
+		var row: Array = expl[y]
+		for x in range(x0, x1 + 1):
+			if row[x] == 0:
+				row[x] = 1
+				changed = true
+	if changed:
+		minimap_dirty = true
+
+# A fresh all-fog exploration grid (0 = never seen on screen).
+func _blank_explored(w: int, h: int) -> Array:
+	var expl := []
+	for y in h:
+		var row := []
+		row.resize(w)
+		row.fill(0)
+		expl.append(row)
+	return expl
 
 
 # ---------------------------------------------------------
@@ -870,6 +914,7 @@ func _generate_map(id: String) -> Dictionary:
 		"spawn": spawn, "north_gate": north_gate, "south_gate": south_gate,
 		"west_gate": west_gate, "east_gate": east_gate,
 		"stairs_down": stairs_down, "stairs_up": Vector2i(-1, -1),
+		"explored": _blank_explored(w, h),
 	}
 
 # A dungeon level: solid rock with a drunkard's-walk cave carved out
@@ -899,11 +944,15 @@ func _generate_cave(def: Dictionary, rng: RandomNumberGenerator) -> Dictionary:
 
 	var center := Vector2i(w / 2, h / 2)
 	g[center.y][center.x] = "U"
+	# The map's bottom-right corner sits behind the minimap overlay
+	# whenever the camera is clamped there, so nothing important may
+	# be placed in it.
+	var ui_corner := Rect2i(w - 10, h - 8, 10, 8)
 	var far := center
 	var best := 0
 	for y in range(1, h - 1):
 		for x in range(1, w - 1):
-			if g[y][x] == ".":
+			if g[y][x] == "." and not ui_corner.has_point(Vector2i(x, y)):
 				var d: int = abs(x - center.x) + abs(y - center.y)
 				if d > best:
 					best = d
@@ -915,7 +964,7 @@ func _generate_cave(def: Dictionary, rng: RandomNumberGenerator) -> Dictionary:
 		best = -1
 		for y in range(1, h - 1):
 			for x in range(1, w - 1):
-				if g[y][x] != ".":
+				if g[y][x] != "." or ui_corner.has_point(Vector2i(x, y)):
 					continue
 				var d: int = mini(abs(x - center.x) + abs(y - center.y),
 						abs(x - far.x) + abs(y - far.y))
@@ -929,6 +978,7 @@ func _generate_cave(def: Dictionary, rng: RandomNumberGenerator) -> Dictionary:
 		"spawn": center, "north_gate": Vector2i(-1, -1), "south_gate": Vector2i(-1, -1),
 		"west_gate": Vector2i(-1, -1), "east_gate": Vector2i(-1, -1),
 		"stairs_down": stairs_down, "stairs_up": center,
+		"explored": _blank_explored(w, h),
 	}
 
 func _clear_area(g: Array, x0: int, y0: int, w: int, h: int) -> void:
@@ -2023,6 +2073,15 @@ func _save_game() -> void:
 		for it in st["items"]:
 			its.append({ "x": it["pos"].x, "y": it["pos"].y, "id": it["id"] })
 		maps[id] = { "mobs": ms, "items": its }
+		# fog of war, one "01110..." string per row (villages have none)
+		if not MAP_DEFS[id].get("no_fog", false):
+			var ex := []
+			for row in st["explored"]:
+				var s := ""
+				for v in row:
+					s += "1" if v == 1 else "0"
+				ex.append(s)
+			maps[id]["explored"] = ex
 	var equip := {}
 	for slot in equipment:
 		equip[str(slot)] = equipment[slot]
@@ -2115,6 +2174,16 @@ func _load_game() -> void:
 			if ITEMS.has(it["id"]):
 				its.append({ "pos": Vector2i(int(it["x"]), int(it["y"])), "id": it["id"] })
 		st["items"] = its
+		# restore the fog of war (older saves simply re-explore)
+		if data["maps"][id].has("explored"):
+			var expl: Array = st["explored"]
+			var rows: Array = data["maps"][id]["explored"]
+			for y in mini(rows.size(), expl.size()):
+				var s: String = rows[y]
+				var row: Array = expl[y]
+				for x in mini(s.length(), row.size()):
+					if s[x] == "1":
+						row[x] = 1
 	for q in quests:
 		if q["state"] == "done" and q.get("opens_west", false):
 			_open_west_gate()
@@ -2624,12 +2693,70 @@ func _draw_tile(x: int, y: int) -> void:
 						else Color(0.30, 0.30, 0.36).lightened(i * 0.16)
 				draw_rect(Rect2(pos + Vector2((TILE - sw) * 0.5, 5.0 + i * 6.0), Vector2(sw, 5.0)), step_col)
 
+# Every unique piece of world loot gets its own little icon, matching
+# its description (the relic's sun, the crown's prongs, a pair of
+# boots...). A soft gold halo behind each keeps them easy to spot.
 func _draw_ground_item(it: Dictionary) -> void:
 	var mid := Vector2(it["pos"]) * TILE + Vector2(TILE, TILE) * 0.5
-	var pts := PackedVector2Array([
-		mid + Vector2(0, -9), mid + Vector2(8, 0), mid + Vector2(0, 9), mid + Vector2(-8, 0)])
-	draw_colored_polygon(pts, Color(1.0, 0.82, 0.20))
-	draw_circle(mid, 3.0, Color(1.0, 0.95, 0.6))
+	draw_circle(mid, 11.0, Color(1.0, 0.88, 0.35, 0.20))
+	match it["id"]:
+		"relic":   # the Sunstone: a warm sun, rays and all
+			for i in 8:
+				var a := i * PI / 4.0
+				draw_line(mid + Vector2(cos(a), sin(a)) * 5.5,
+						mid + Vector2(cos(a), sin(a)) * 9.0, Color(1.0, 0.72, 0.15), 1.6)
+			draw_circle(mid, 5.0, Color(1.0, 0.62, 0.10))
+			draw_circle(mid, 2.4, Color(1.0, 0.90, 0.55))
+		"crown":   # the Sunken Crown: gold band, three prongs, a red gem
+			for px in [-5.0, 0.0, 5.0]:
+				draw_colored_polygon(PackedVector2Array([
+					mid + Vector2(px - 2.5, 1), mid + Vector2(px, -7),
+					mid + Vector2(px + 2.5, 1)]), Color(0.92, 0.76, 0.22))
+			for px in [-5.0, 0.0, 5.0]:
+				draw_circle(mid + Vector2(px, -6), 1.2, Color(0.98, 0.90, 0.55))
+			draw_rect(Rect2(mid + Vector2(-7.5, 1), Vector2(15, 5)), Color(0.92, 0.76, 0.22))
+			draw_rect(Rect2(mid + Vector2(-7.5, 1), Vector2(15, 5)), Color(0.55, 0.42, 0.08), false, 1.0)
+			draw_circle(mid + Vector2(0, 3.5), 1.7, Color(0.85, 0.18, 0.14))
+		"runeblade":  # a pale blade with a glowing blue rune
+			draw_line(mid + Vector2(-5, 6), mid + Vector2(6, -7), Color(0.72, 0.75, 0.85), 3.2)
+			draw_line(mid + Vector2(6, -7), mid + Vector2(7.5, -8.8), Color(0.92, 0.94, 1.0), 2.0)
+			draw_line(mid + Vector2(-7, 1.5), mid + Vector2(-1, 7.5), Color(0.42, 0.30, 0.13), 2.4)
+			draw_line(mid + Vector2(-5, 6), mid + Vector2(-8.5, 9.5), Color(0.28, 0.20, 0.09), 2.6)
+			draw_circle(mid + Vector2(0.5, -0.5), 2.4, Color(0.35, 0.65, 1.0, 0.55))
+			draw_circle(mid + Vector2(0.5, -0.5), 1.2, Color(0.75, 0.90, 1.0))
+		"boots":   # Scout's Boots: a leather pair, soles and all
+			for off in [-6.0, 1.0]:
+				var o := mid + Vector2(off, 0)
+				draw_rect(Rect2(o + Vector2(0, -7), Vector2(4, 9)), Color(0.44, 0.28, 0.12))
+				draw_rect(Rect2(o + Vector2(0, 2), Vector2(6.5, 4)), Color(0.38, 0.24, 0.10))
+				draw_rect(Rect2(o + Vector2(0, 5), Vector2(6.5, 1.6)), Color(0.20, 0.13, 0.06))
+				draw_line(o + Vector2(0.5, -5.5), o + Vector2(3.5, -5.5), Color(0.30, 0.19, 0.08), 1.0)
+		"belt":    # Hunter's Belt: a strap with a gold buckle
+			draw_rect(Rect2(mid + Vector2(-9, -2.2), Vector2(18, 4.6)), Color(0.42, 0.27, 0.11))
+			draw_line(mid + Vector2(-9, -1), mid + Vector2(9, -1), Color(0.32, 0.20, 0.08), 0.8)
+			draw_line(mid + Vector2(-9, 1.4), mid + Vector2(9, 1.4), Color(0.32, 0.20, 0.08), 0.8)
+			draw_rect(Rect2(mid + Vector2(-2.8, -3.8), Vector2(5.6, 7.6)), Color(0.92, 0.80, 0.30), false, 1.8)
+			draw_line(mid + Vector2(0, -1.5), mid + Vector2(0, 1.5), Color(0.92, 0.80, 0.30), 1.4)
+		"legplates":  # Ancient Legplates: two riveted steel greaves
+			for off in [-5.5, 1.0]:
+				var r := Rect2(mid + Vector2(off, -7.5), Vector2(4.6, 15))
+				draw_rect(r, Color(0.55, 0.57, 0.63))
+				draw_rect(r, Color(0.30, 0.32, 0.38), false, 1.0)
+				draw_line(mid + Vector2(off, -1), mid + Vector2(off + 4.6, -1), Color(0.38, 0.40, 0.46), 1.0)
+				draw_circle(mid + Vector2(off + 2.3, -5), 0.8, Color(0.78, 0.80, 0.86))
+				draw_circle(mid + Vector2(off + 2.3, 4.5), 0.8, Color(0.78, 0.80, 0.86))
+		"armor":   # Leather Armor: a stitched cuirass
+			draw_rect(Rect2(mid + Vector2(-6, -5.5), Vector2(12, 11.5)), Color(0.46, 0.30, 0.14))
+			draw_rect(Rect2(mid + Vector2(-8.2, -5.5), Vector2(2.2, 4.5)), Color(0.40, 0.26, 0.12))
+			draw_rect(Rect2(mid + Vector2(6, -5.5), Vector2(2.2, 4.5)), Color(0.40, 0.26, 0.12))
+			draw_rect(Rect2(mid + Vector2(-2.4, -5.5), Vector2(4.8, 2)), Color(0.28, 0.18, 0.08))
+			draw_line(mid + Vector2(-6, -1), mid + Vector2(6, -1), Color(0.32, 0.20, 0.09), 1.0)
+			draw_line(mid + Vector2(0, -3.5), mid + Vector2(0, 6), Color(0.32, 0.20, 0.09), 1.0)
+		_:         # anything else: the classic gold diamond
+			draw_colored_polygon(PackedVector2Array([
+				mid + Vector2(0, -9), mid + Vector2(8, 0),
+				mid + Vector2(0, 9), mid + Vector2(-8, 0)]), Color(1.0, 0.82, 0.20))
+			draw_circle(mid, 3.0, Color(1.0, 0.95, 0.6))
 
 # Each vendor is unique: a gold badge holding a symbol for their
 # trade (bread loaf, anvil, alchemy flask, coin bag) with their

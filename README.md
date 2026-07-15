@@ -78,7 +78,10 @@ A winding road connects the south and north gates of every surface
 map, so you can never be walled in by the procedural generation.
 Every mob is drawn with its own face icon (rat whiskers, goblin
 ears, boar tusks, wolf muzzle, skull, troll underbite, archer
-headband, wraith glow).
+headband, wraith glow, the bone knight's helm), and every piece of
+world loot with its own icon too (the relic's sun, the crown's
+prongs, a pair of boots, the glowing runeblade...), each in a soft
+gold halo so it catches the eye.
 
 Maps connect through data-driven links (gates and stairs), and both
 the world map screen and all transitions derive from them — adding
@@ -148,7 +151,11 @@ its entrance tile.
   Inventory / Journal / Spells / Map / Options buttons
 - Minimap (bottom-right): the real terrain of the current area,
   rendered once into a texture, with your position and the area
-  name; the world overview lives on the world map screen (M)
+  name; slightly translucent, so loot lying under the overlay still
+  shines through. Fog of war everywhere but the villages: only
+  places that have actually been on your screen are drawn, they
+  stay revealed forever, and the fog is stored in the save file;
+  the world overview lives on the world map screen (M)
 - Options menu (O or Esc): master volume, keybinds, fullscreen;
   menu items and the sound slider also respond to mouse click/drag;
   settings persist to user://settings.cfg
@@ -187,7 +194,7 @@ Public domain (CC0).
 - The region beyond Westmere's boarded north gate
 - Spells that interact with the environment (burning trees,
   freezing water)
-- Fog of war and explored-map reveal mechanisms
+- Fog of war for the main view too (the minimap already has it)
 - Random item drops from mobs (potions, gear with rolled stats)
 - A repeatable quest or two after victory, so late runs have goals
 - Steam integration (achievements, cloud saves)

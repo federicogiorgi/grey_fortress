@@ -59,11 +59,27 @@ func _run(game: Node2D) -> void:
 		if def.has("cave"):
 			_check(st["items"].size() == 1 and st["items"][0]["id"] == def["loot"],
 					"%s holds its loot (%s)" % [id, def.get("loot", "?")])
+			var lp: Vector2i = st["items"][0]["pos"]
+			_check(lp.x < def["w"] - 10 or lp.y < def["h"] - 8,
+					"%s loot avoids the minimap corner" % id)
 			if def.has("down"):
 				_check(st["stairs_down"].x >= 0, "%s has a stairway down" % id)
+				_check(st["stairs_down"].x < def["w"] - 10 or st["stairs_down"].y < def["h"] - 8,
+						"%s stairway avoids the minimap corner" % id)
 			for m in st["mobs"]:
 				_check(st["grid"][m["pos"].y][m["pos"].x] == ".",
 						"%s mob stands on floor" % id)
+		_check((st["explored"] as Array).size() == def["h"],
+				"%s has an exploration grid" % id)
+
+	# fog of war: the view around the spawn is explored, far corners not
+	game._load_map("wilds", "spawn")
+	game._refresh()
+	var expl: Array = game.map_state["wilds"]["explored"]
+	_check(expl[game.player_pos.y][game.player_pos.x] == 1, "fog: the spawn view is explored")
+	_check(expl[2][2] == 0, "fog: the far corner stays dark")
+	_check(game.MAP_DEFS["town"].get("no_fog", false), "fog: town is exempt")
+	_check(game.MAP_DEFS["west"].get("no_fog", false), "fog: Westmere is exempt")
 
 	# the full dungeon chain loads
 	game._load_map("crypt", "descend")

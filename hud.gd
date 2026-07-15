@@ -261,6 +261,7 @@ const MINI_TILE_COLORS := {
 	"B": Color(0.40, 0.30, 0.15), "O": Color(0.04, 0.04, 0.06),
 	"U": Color(0.80, 0.78, 0.72),
 }
+const FOG_COLOR := Color(0.05, 0.05, 0.07)
 
 func _build_minimap() -> void:
 	var g: Array = game.grid
@@ -270,13 +271,20 @@ func _build_minimap() -> void:
 	var def: Dictionary = game.MAP_DEFS[game.current_map]
 	var floor_col: Color = def["tint"]
 	var wall_col: Color = def.get("palette", {}).get("wall", Color(0.45, 0.45, 0.50))
+	# fog of war: tiles never shown on screen stay dark (villages exempt)
+	var fog: bool = not def.get("no_fog", false)
+	var expl: Array = game.map_state[game.current_map]["explored"]
 	var img := Image.create(gw * mini_zoom, gh * mini_zoom, false, Image.FORMAT_RGB8)
 	for y in gh:
 		for x in gw:
-			var c: String = g[y][x]
-			var col: Color = MINI_TILE_COLORS.get(c, floor_col)
-			if c == "#":
-				col = wall_col
+			var col: Color
+			if fog and expl[y][x] == 0:
+				col = FOG_COLOR
+			else:
+				var c: String = g[y][x]
+				col = MINI_TILE_COLORS.get(c, floor_col)
+				if c == "#":
+					col = wall_col
 			img.fill_rect(Rect2i(x * mini_zoom, y * mini_zoom, mini_zoom, mini_zoom), col)
 	mini_tex = ImageTexture.create_from_image(img)
 	mini_for = game.current_map
@@ -296,11 +304,12 @@ func _draw_minimap() -> void:
 	var px := vs.x - w - 10.0
 	var py := vs.y - BAR_H - h - 10.0
 
-	draw_rect(Rect2(px, py, w, h), Color(0.06, 0.06, 0.09, 0.82))
+	# translucent enough that loot lying under the overlay shines through
+	draw_rect(Rect2(px, py, w, h), Color(0.06, 0.06, 0.09, 0.55))
 	draw_rect(Rect2(px, py, w, h), Color(0.35, 0.35, 0.42), false, 1.0)
 	var mx: float = px + (w - tw) * 0.5
 	var my: float = py + pad
-	draw_texture(mini_tex, Vector2(mx, my))
+	draw_texture(mini_tex, Vector2(mx, my), Color(1, 1, 1, 0.80))
 	var dot := Vector2(mx, my) + (Vector2(game.player_pos) + Vector2(0.5, 0.5)) * mini_zoom
 	draw_circle(dot, 2.4, Color(1.0, 0.95, 0.75))
 	draw_circle(dot, 2.4, Color(0.3, 0.2, 0.0), false, 0.8)
