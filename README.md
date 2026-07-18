@@ -6,6 +6,27 @@ A turn-based roguelike prototype in the style of Castle of the Winds,
 built with Godot 4. Desktop-only, targeting a Steam release (the Android
 export was removed).
 
+## The story (spoilers)
+
+Grey Fortress Town sits in the shadow of an abandoned fortress no one
+talks about. Its four vendors keep you busy — until Dolm the trader
+hires you to recover a Mysterious Parchment from a vault said to lie
+deeper than the Sunken Crypt. He is right: it waits in the blackest
+corner of Bone Hollow, in a dead knight's keeping.
+
+Taking it is the mistake the whole game turns on. The parchment is a
+page of the Covenant — the seal that bound the Grey Fortress and the
+dead who garrison it. The moment it leaves the vault, the seal
+breaks; the first time you set foot in town again you find it burned
+to the ground, every house a charred shell, and a scrawl on a
+scorched door: *"Gone west. Find us. — Dolm."*
+
+The survivors — all four vendors — have fled through the broken west
+gate to Westmere Village, where they trade on from a refugee camp by
+the temple green. Hand Dolm the parchment there and he reads what you
+both should have left buried... and looks north, at the boarded gate,
+where the road climbs to the Grey Fortress itself (the next region).
+
 ## How to run
 
 1. Install Godot 4.2+ (standard version) from godotengine.org.
@@ -53,35 +74,37 @@ Movement is keyboard-only; the mouse operates the UI.
 
 ## The world (camera follows you)
 
-1. Grey Fortress Town: 4 vendor houses, healing temple, north gate
+1. Grey Fortress Town: 4 vendor houses, healing temple, north gate —
+   until the story burns it down to ash, charred shells and a broken
+   west gate (only the stone temple survives)
 2. Northern Wilds: rats, goblins, wild boars
 3. Dark Forest: wolves and goblin archers, the densest trees
 4. Ancient Ruins: swarming with skeletons, plus goblins, archers and
-   trolls; the Sunstone Relic lies between two trees near the north
-   end, and a sunken stairway near the east side leads underground
+   trolls; a sunken stairway near the east side leads underground
 5. Sunken Crypt: the first dungeon — a dark cave carved beneath the
    ruins, haunted by skeletons and hexing wraiths, with the Sunken
    Crown (+10 max HP) hidden in its farthest corner and a second
    stairway leading even deeper
 6. Bone Hollow: the second dungeon level, deeper and deadlier —
-   bone knights patrol it alongside the dead of the crypt above,
-   and the Runeblade (+3 damage) lies in its farthest corner
-7. Westmere Village (west of town, unlocked by the Sunstone Relic
-   quest): larger than town, eight vendors each with a real shop
-   and a quest of their own; their wares fill the equipment slots
-   the town leaves empty (shirts, necklaces, gauntlets, a tabard),
-   and Odo the fletcher sells wands that add spell damage. A temple
-   at the bottom, and a boarded-up north gate to a future region
-   (work in progress)
+   bone knights patrol it, the Runeblade (+3 damage) lies in one
+   far corner and the Mysterious Parchment in another
+7. Westmere Village (west of town, reached only after the fall):
+   larger than town, eight vendors each with a real shop and a
+   quest of their own, plus the four town vendors trading on from
+   a refugee camp of tents by the temple green. Westmere's wares
+   fill the equipment slots the town leaves empty (shirts,
+   necklaces, gauntlets, a tabard), and Odo the fletcher sells
+   wands that add spell damage. The boarded-up north gate hides
+   the road to the Grey Fortress itself (a future region)
 
 A winding road connects the south and north gates of every surface
 map, so you can never be walled in by the procedural generation.
 Every mob is drawn with its own face icon (rat whiskers, goblin
 ears, boar tusks, wolf muzzle, skull, troll underbite, archer
 headband, wraith glow, the bone knight's helm), and every piece of
-world loot with its own icon too (the relic's sun, the crown's
-prongs, a pair of boots, the glowing runeblade...), each in a soft
-gold halo so it catches the eye.
+world loot with its own icon too (the parchment's wax seal, the
+crown's prongs, a pair of boots, the glowing runeblade...), each in
+a soft gold halo so it catches the eye.
 
 Maps connect through data-driven links (gates and stairs), and both
 the world map screen and all transitions derive from them — adding
@@ -108,7 +131,14 @@ its entrance tile.
   restored by leveling up, praying at the altar, or mana potions
   (sold by Cyra the alchemist)
 - Mobs show a little green HP bar underneath
-- Inventory: bread and potions heal; the relic is a quest item
+- Inventory: grouped into categories — Weapons, Armour, Consumables
+  and Quest Items — with headers in the character sheet, so potions
+  never rub elbows with swords; shop sell lists use the same order
+- Town portal: Scrolls of Town Portal (sold by Cyra and Mira)
+  teleport you home instantly — Diablo style — and leave a swirling
+  portal there that returns you to the very tile you cast from,
+  then closes; one round trip per scroll, and "home" moves to
+  Westmere after the fall of the town
 - Equipment: 20 WoW-style slots (head through bag); items give
   damage or max HP bonuses; a bag in the Bag slot raises backpack
   capacity from 20 to 28 stacks (no weight limits)
@@ -129,10 +159,11 @@ its entrance tile.
   distant lightning (thunder rumble and a brief screen flash)
 - Quests: every vendor gives one on first talk; return when done.
   The town's four (kill 5 rats, kill 3 goblins, bring 10 coins,
-  fetch the relic) are joined by Westmere's eight (wolves, boars,
-  trolls, skeletons, potions and bread to fetch, coins to invest),
-  twelve in all; the relic quest rewards Leather Armor (+4 max HP,
-  chest slot, drawn on the hero) and opens the west gate of town
+  fetch the parchment) are joined by Westmere's eight (wolves,
+  boars, trolls, skeletons, potions and bread to fetch, coins to
+  invest), twelve in all; the parchment quest drives the story —
+  finding it burns the town, and turning it in (to Dolm, in exile)
+  rewards Leather Armor (+4 max HP, drawn on the hero)
 - Save / load: "Save Game" in the options menu writes
   user://save.json; "Continue" on the title screen restores it
   (the world regenerates deterministically, so only the dynamic
@@ -191,7 +222,8 @@ Public domain (CC0).
 ## Next steps
 
 - A third dungeon level below Bone Hollow, with a boss guarding it
-- The region beyond Westmere's boarded north gate
+- The Grey Fortress itself, beyond Westmere's boarded north gate —
+  the place the parchment's Covenant no longer seals
 - Spells that interact with the environment (burning trees,
   freezing water)
 - Fog of war for the main view too (the minimap already has it)

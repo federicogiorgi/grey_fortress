@@ -1,23 +1,26 @@
 extends Node2D
 # =============================================================
-#  GREY FORTRESS - v9
+#  GREY FORTRESS - v10
 #
 #  New in this version:
-#   - Westmere's eight vendors are real now: each has a shop
-#     (two item tiers, like the town's) and a quest, bringing
-#     the quest total to twelve. Their wares fill the equipment
-#     slots that used to be empty: Shirt, Neck, Gloves, Tabard
-#     and Ranged (wands)
-#   - Spell damage as a stat: wands sold by Odo the fletcher
-#     occupy the Ranged slot and add +1/+2 damage to every
-#     spell; the spellbook and character sheet show the bonus
-#   - A second dungeon level: Bone Hollow, carved even deeper
-#     below the Sunken Crypt, patrolled by bone knights (a new
-#     heavy melee mob) and hiding the Runeblade (+3 damage)
-#   - Cave generation is fully data-driven now: any cave def
-#     can name its treasure ("loot") and can link further
-#     "down", so a third level is one MAP_DEFS entry away
+#   - The story: Dolm's quest now hunts the Mysterious Parchment,
+#     hidden in the deepest corner of Bone Hollow. Taking it
+#     breaks the Covenant that sealed the Grey Fortress - and
+#     when you next set foot in town, you find it burned to the
+#     ground. The four vendors flee to a refugee camp in
+#     Westmere, where Dolm reads the parchment and reveals what
+#     you have done (and where the road must lead next)
+#   - Town portal scrolls (Cyra and Mira sell them): using one
+#     teleports you home instantly and leaves a portal there
+#     that returns you to the very tile you cast it from -
+#     one round trip per scroll, like Diablo's
+#   - The backpack is grouped into categories: Weapons, Armour,
+#     Consumables and Quest Items, with headers in the character
+#     sheet (and the same order in shop sell lists)
 #
+#  v9: Westmere's eight vendors got real shops and quests (12
+#  quests total), spell-damage wands, Bone Hollow + bone knights,
+#  minimap fog of war, per-item world loot icons.
 #  v8: area minimap + world map, the Sunken Crypt, spell/mob
 #  line of sight, ranged mobs, mana regen, sound effects.
 #  v7: three spells + spellbook + targeting + projectiles + mana
@@ -43,7 +46,8 @@ const MOVE_DELAY_REPEAT := 0.115  # steps per second while holding ~ 8.7
 const MAP_DEFS := {
 	"town": {
 		# The west gate exists in the def but its "<" tiles are only
-		# carved into the map once the Sunstone Relic quest is done.
+		# carved into the map once the town burns (the survivors break
+		# it open as they flee to Westmere).
 		# Villages are "no_fog": their minimap is fully drawn from the
 		# start; everywhere else fog of war hides the unseen parts.
 		"name": "Grey Fortress Town", "north": "wilds", "west": "west", "music": "town",
@@ -76,8 +80,8 @@ const MAP_DEFS := {
 		"outpost": { "x": 28, "y": 58, "item": "legplates" },
 	},
 	# Reached through the west gate of town, which only opens once the
-	# Sunstone Relic quest is complete. Its own north gate is boarded
-	# up: a future region, still work in progress.
+	# town burns and the survivors flee here. Its own north gate is
+	# boarded up: the road to the Grey Fortress itself, a future region.
 	"west": {
 		"name": "Westmere Village", "east": "town", "music": "town",
 		"w": 50, "h": 36, "tint": Color(0.36, 0.42, 0.30),
@@ -95,11 +99,15 @@ const MAP_DEFS := {
 		"mobs": { "s": 10, "y": 6 },
 	},
 	# The second dungeon level, deeper and deadlier: bone knights
-	# patrol it and the Runeblade lies in its farthest corner.
+	# patrol it, the Runeblade lies in its farthest corner, and the
+	# Mysterious Parchment - the item that turns the whole story -
+	# waits in another ("quest_loot" is placed far from both the
+	# entrance and the treasure).
 	"crypt2": {
 		"name": "Bone Hollow", "up": "crypt", "music": "ruins",
 		"w": 70, "h": 52, "tint": Color(0.24, 0.15, 0.13),
 		"tree_density": 0.0, "water_blobs": 0, "cave": true, "loot": "runeblade",
+		"quest_loot": "parchment",
 		"palette": { "floor": Color(0.19, 0.13, 0.12), "floor_hi": Color(0.23, 0.16, 0.14),
 				"wall": Color(0.12, 0.08, 0.08), "wall_hi": Color(0.17, 0.12, 0.11) },
 		"mobs": { "s": 12, "y": 7, "k": 5 },
@@ -226,8 +234,10 @@ const ITEMS := {
 			"desc": "Restores 16 mana" },
 	"pie":    { "name": "Meat Pie",         "price": 15, "heal": 14,
 			"desc": "Restores 14 HP" },
-	"relic":  { "name": "Sunstone Relic",   "price": 0,
-			"desc": "Quest item, warm to the touch" },
+	"parchment": { "name": "Mysterious Parchment", "price": 0, "quest": true,
+			"desc": "Quest item, sealed with grey wax" },
+	"tpscroll": { "name": "Scroll of Town Portal", "price": 30, "portal": true,
+			"desc": "Teleports you home and back" },
 	"armor":  { "name": "Leather Armor",    "price": 0, "slot": 4,  "hp": 4,
 			"desc": "+4 max HP" },
 	"boots":  { "name": "Scout's Boots",     "price": 0, "slot": 7,  "hp": 6,
@@ -269,7 +279,7 @@ const VENDORS := [
 	},
 	{
 		"name": "Cyra the alchemist", "short": "Cyra", "symbol": "flask",
-		"stock": ["potion", "gpotion", "mpotion", "charm", "talisman"],
+		"stock": ["potion", "gpotion", "mpotion", "tpscroll", "charm", "talisman"],
 		"greet": "Cyra: Potions brewing. Do not rush art.",
 		"quest": { "desc": "Bring me 10 coins", "type": "coins", "need": 10,
 				"intro": "Reagents are expensive. Fund my research with 10 coins?",
@@ -279,11 +289,10 @@ const VENDORS := [
 		"name": "Dolm the trader", "short": "Dolm", "symbol": "bag",
 		"stock": ["cloak", "fcloak", "ring", "sring", "bag", "lbag"],
 		"greet": "Dolm: Rare goods for discerning customers.",
-		"quest": { "desc": "Recover the Sunstone Relic from the Ancient Ruins",
-				"type": "item", "target": "relic", "need": 1,
-				"intro": "Legend places the Sunstone Relic in the ruins far north, between two trees. Bring it to me.",
-				"reward_coins": 60, "reward_items": { "armor": 1 }, "reward_xp": 50,
-				"opens_west": true },
+		"quest": { "desc": "Recover the Mysterious Parchment from the depths below the ruins",
+				"type": "item", "target": "parchment", "need": 1,
+				"intro": "Old ledgers speak of a sealed parchment locked in a vault below the Ancient Ruins - deeper than the crypt, they say. Bring it to me, whatever it takes.",
+				"reward_coins": 60, "reward_items": { "armor": 1 }, "reward_xp": 50 },
 	},
 ]
 
@@ -309,7 +318,7 @@ const WEST_VENDORS := [
 	},
 	{
 		"name": "Mira the herbalist", "short": "Mira",  "symbol": "flask",
-		"stock": ["salve", "tonic"],
+		"stock": ["salve", "tonic", "tpscroll"],
 		"greet": "Mira: Every ailment has its herb.",
 		"quest": { "desc": "Bring 2 Healing Potions", "type": "item", "target": "potion", "need": 2,
 				"intro": "My whole shelf of potions spoiled in the damp. Bring me 2 Healing Potions to restock?",
@@ -397,6 +406,16 @@ var quests := []
 var current_shop := -1
 var shop_index := 0     # keyboard selection inside the shop panel
 var buyback := {}       # vendor set_idx -> [{id, price}] items sold to them
+
+# The story's hinge: picking up the Mysterious Parchment breaks the
+# seal; the first time you set foot in town afterwards, it has been
+# burned to the ground and the vendors have fled to Westmere.
+var parchment_found := false
+var town_burned := false
+# Active town portal: {map, pos, home, home_pos}, or empty. Cast a
+# Scroll of Town Portal anywhere to jump home; the portal waiting
+# there returns you to the cast tile, then closes.
+var portal := {}
 
 var active_spell := "dart"
 var spellbook_index := 0
@@ -558,6 +577,9 @@ func _start() -> void:
 	buyback = {}
 	shop_index = 0
 	active_spell = "dart"
+	parchment_found = false
+	town_burned = false
+	portal = {}
 	projectiles.clear()
 	_cancel_targeting()
 	mode = Mode.PLAY
@@ -633,6 +655,8 @@ func _process(delta: float) -> void:
 	if banner_timer > 0.0:
 		banner_timer -= delta
 		hud.queue_redraw()
+	if not portal.is_empty() and current_map == portal["home"]:
+		queue_redraw()   # keep the portal swirling
 	_weather_tick(delta)
 	if not projectiles.is_empty():
 		_advance_projectiles(delta)
@@ -690,7 +714,25 @@ func _polled_dir() -> Vector2i:
 # ---------------------------------------------------------
 #  Map loading and procedural generation
 # ---------------------------------------------------------
+# Display name/color of a map; after the burning, the town shows as
+# its own ruin everywhere (banner, minimap, world map, death screen).
+func map_name(id: String) -> String:
+	if id == "town" and town_burned:
+		return "Ruins of Grey Fortress"
+	return MAP_DEFS[id]["name"]
+
+func map_tint(id: String) -> Color:
+	if id == "town" and town_burned:
+		return Color(0.17, 0.16, 0.16)
+	return MAP_DEFS[id]["tint"]
+
 func _load_map(id: String, arrive: String) -> void:
+	# The story's turning point: the first return to town after the
+	# parchment is taken finds it burned to the ground.
+	var burn_now: bool = id == "town" and parchment_found and not town_burned
+	if burn_now:
+		town_burned = true
+		map_state.erase("town")   # regenerate it in ashes
 	current_map = id
 	var revisit := map_state.has(id)
 	if not revisit:
@@ -722,6 +764,9 @@ func _load_map(id: String, arrive: String) -> void:
 		_respawn_mobs()
 	# cache the map's terrain palette for the tile renderer
 	var pal: Dictionary = MAP_DEFS[id].get("palette", {})
+	if id == "town" and town_burned:
+		pal = { "floor": Color(0.15, 0.14, 0.13), "floor_hi": Color(0.18, 0.17, 0.15),
+				"wall": Color(0.24, 0.23, 0.24), "wall_hi": Color(0.30, 0.29, 0.30) }
 	pal_floor = pal.get("floor", Color(0.20, 0.26, 0.18))
 	pal_floor_hi = pal.get("floor_hi", Color(0.24, 0.31, 0.21))
 	pal_wall = pal.get("wall", Color(0.38, 0.38, 0.44))
@@ -741,8 +786,15 @@ func _load_map(id: String, arrive: String) -> void:
 	_set_rain(randf() < RAIN_CHANCE)
 	if not visited.has(id):
 		visited[id] = true
-		banner_text = "Entering... %s" % MAP_DEFS[id]["name"]
+		banner_text = "Entering... %s" % map_name(id)
 		banner_timer = 3.2
+	if burn_now:
+		banner_text = "Grey Fortress Town... lies in ashes"
+		banner_timer = 5.0
+		flash_alpha = 1.0
+		thunder_player.play()
+		_log("You return to a nightmare: every roof is fallen, every wall charred.")
+		_log("On a scorched door, a hasty scrawl: 'Gone west. Find us. - Dolm'")
 
 func _generate_map(id: String) -> Dictionary:
 	var def: Dictionary = MAP_DEFS[id]
@@ -804,17 +856,39 @@ func _generate_map(id: String) -> Dictionary:
 	var altars := []
 	var items := []
 	var spawn := Vector2i(gx, h - 3)
+	var west_gate := Vector2i(-1, -1)
+	var east_gate := Vector2i(-1, -1)
 
 	# 6. The town: a compact village filling most of its small map.
+	# After the burning it regenerates in ashes: charred shells where
+	# the houses stood, burnt trees, no vendors - only the stone
+	# temple still standing, and the west gate broken open by the
+	# survivors as they fled to Westmere.
 	if id == "town":
 		for y in range(4, 27):
 			for x in range(6, 36):
 				g[y][x] = "."
-		_place_house(g, 9, 6, vs)    # Alda
-		_place_house(g, 28, 6, vs)   # Borin
-		_place_house(g, 9, 14, vs)   # Cyra
-		_place_house(g, 28, 14, vs)  # Dolm
-		_place_temple(g, 18, 21, altars)
+		if town_burned:
+			for hp in [Vector2i(9, 6), Vector2i(28, 6), Vector2i(9, 14), Vector2i(28, 14)]:
+				_place_burned_house(g, hp.x, hp.y, rng)
+			_place_temple(g, 18, 21, altars)   # the temple alone survived
+			var gy: int = h / 2
+			for y in range(gy - 1, gy + 3):
+				for x in range(1, 7):
+					g[y][x] = "."
+			g[gy][0] = "<"
+			g[gy + 1][0] = "<"
+			west_gate = Vector2i(0, gy)
+			for y in h:
+				for x in w:
+					if g[y][x] == "T":
+						g[y][x] = "F"
+		else:
+			_place_house(g, 9, 6, vs)    # Alda
+			_place_house(g, 28, 6, vs)   # Borin
+			_place_house(g, 9, 14, vs)   # Cyra
+			_place_house(g, 28, 14, vs)  # Dolm
+			_place_temple(g, 18, 21, altars)
 		spawn = Vector2i(gx, 12)
 		# Short road from the plaza up to the north gate.
 		for y in range(1, 7):
@@ -824,8 +898,6 @@ func _generate_map(id: String) -> Dictionary:
 	# 6b. Westmere: a larger village. Eight vendor houses in two rows,
 	# the temple at the bottom, an east gate back to town, and a
 	# boarded-up north gate (a future region, work in progress).
-	var west_gate := Vector2i(-1, -1)
-	var east_gate := Vector2i(-1, -1)
 	if id == "west":
 		for y in range(4, 32):
 			for x in range(5, 45):
@@ -847,15 +919,13 @@ func _generate_map(id: String) -> Dictionary:
 		for y in range(1, 5):
 			for x in range(gx - 1, gx + 3):
 				g[y][x] = "."
-
-	# 7. The Sunstone Relic, between two trees (ruins map only).
-	if id == "ruins":
-		for y in range(10, 15):
-			for x in range(gx - 4, gx + 6):
-				g[y][x] = "."
-		g[12][gx - 1] = "T"
-		g[12][gx + 1] = "T"
-		items.append({ "pos": Vector2i(gx, 12), "id": "relic" })
+		# The refugee camp: the four town vendors, tents pitched on
+		# the green above the temple. Westmere is only reachable after
+		# the town burns, so they are always here.
+		for i in 4:
+			var cx := 8 + i * 9
+			g[23][cx] = "E"
+			vs.append({ "pos": Vector2i(cx, 24), "set_idx": i, "set": "town" })
 
 	# 7b. Loot outpost: a small stone keep holding a unique item,
 	# with a carved corridor to the main road so it is always reachable.
@@ -958,6 +1028,21 @@ func _generate_cave(def: Dictionary, rng: RandomNumberGenerator) -> Dictionary:
 					best = d
 					far = Vector2i(x, y)
 	var items := [{ "pos": far, "id": def["loot"] }]
+	if def.has("quest_loot"):
+		# the quest item hides in yet another corner, far from both
+		# the entrance and the treasure
+		var qbest := -1
+		var qpos := center
+		for y in range(1, h - 1):
+			for x in range(1, w - 1):
+				if g[y][x] != "." or ui_corner.has_point(Vector2i(x, y)):
+					continue
+				var d: int = mini(abs(x - center.x) + abs(y - center.y),
+						abs(x - far.x) + abs(y - far.y))
+				if d > qbest:
+					qbest = d
+					qpos = Vector2i(x, y)
+		items.append({ "pos": qpos, "id": def["quest_loot"] })
 	var stairs_down := Vector2i(-1, -1)
 	if def.has("down"):
 		# the carved tile whose NEARER of (entrance, treasure) is farthest
@@ -999,6 +1084,18 @@ func _place_house(g: Array, x0: int, y0: int, vs: Array, set_name: String = "tow
 			g[y][x] = "."
 	g[y0 + 3][x0 + 2] = "D"
 	vs.append({ "pos": Vector2i(x0 + 2, y0 + 1), "set_idx": vs.size(), "set": set_name })
+
+# The charred shell of a 5x4 house: its wall line with fire-eaten
+# gaps, no door, no vendor. Used by the burned town.
+func _place_burned_house(g: Array, x0: int, y0: int, rng: RandomNumberGenerator) -> void:
+	for x in range(x0, x0 + 5):
+		for y in [y0, y0 + 3]:
+			if rng.randf() < 0.7:
+				g[y][x] = "R"
+	for y in range(y0 + 1, y0 + 3):
+		for x in [x0, x0 + 4]:
+			if rng.randf() < 0.7:
+				g[y][x] = "R"
 
 # 7x4 temple with an altar and a north-facing door (toward the plaza).
 func _place_temple(g: Array, x0: int, y0: int, altars: Array) -> void:
@@ -1309,13 +1406,17 @@ func _char_sheet_click(mp: Vector2) -> void:
 			ui_index = i
 			_activate_selection()
 			return
-	var list := inventory_list()
-	for i in list.size():
-		if Rect2(px + 504, top + i * 17.0 - 12.0, 456, 16).has_point(mp):
+	var entries := backpack_entries()
+	var item_i := 0
+	for i in entries.size():
+		if entries[i]["kind"] == "header":
+			continue
+		if Rect2(px + 504, top + i * 16.0 - 12.0, 456, 15).has_point(mp):
 			ui_pane = 1
-			ui_index = i
+			ui_index = item_i
 			_activate_selection()
 			return
+		item_i += 1
 
 func _pane_len() -> int:
 	if ui_pane == 0:
@@ -1332,7 +1433,7 @@ func _activate_selection() -> void:
 			var it: Dictionary = ITEMS[id]
 			if it.has("slot"):
 				_equip(id)
-			elif it.has("heal") or it.has("mana_heal"):
+			elif it.has("heal") or it.has("mana_heal") or it.has("portal"):
 				_use_item(id)
 			else:
 				_log("The %s cannot be used or equipped." % it["name"])
@@ -1675,6 +1776,9 @@ func _try_player_move(dir: Vector2i) -> void:
 	elif _is_walkable(target):
 		player_pos = target
 		_pickup_items()
+		if not portal.is_empty() and current_map == portal["home"] and player_pos == portal["home_pos"]:
+			_travel_portal()
+			return
 		if _check_transition():
 			return
 	else:
@@ -1723,30 +1827,37 @@ func _pickup_items() -> void:
 			_sfx("pickup")
 			_log("You found the %s!" % ITEMS[id]["name"])
 			_gain_xp(10)
+			if id == "parchment" and not parchment_found:
+				# the moment the story turns: the seal breaks
+				parchment_found = true
+				flash_alpha = 1.0
+				thunder_player.play()
+				_log("The wax seal splinters in your hand. The runes flare -")
+				_log("- and far above, something answers with a sound like thunder.")
 
 func _check_transition() -> bool:
 	var tile: String = grid[player_pos.y][player_pos.x]
 	var def: Dictionary = MAP_DEFS[current_map]
 	if tile == "^" and def.has("north"):
 		_load_map(def["north"], "south_gate")
-		_log("You travel north to the %s." % MAP_DEFS[current_map]["name"])
+		_log("You travel north to the %s." % map_name(current_map))
 	elif tile == "v" and def.has("south"):
 		_load_map(def["south"], "north_gate")
-		_log("You head south to %s." % MAP_DEFS[current_map]["name"])
+		_log("You head south to %s." % map_name(current_map))
 	elif tile == "<" and def.has("west"):
 		_load_map(def["west"], "east_gate")
-		_log("After days of journey west, you arrive at %s." % MAP_DEFS[current_map]["name"])
+		_log("After days of journey west, you arrive at %s." % map_name(current_map))
 	elif tile == ">" and def.has("east"):
 		_load_map(def["east"], "west_gate")
-		_log("After days of journey east, you return to %s." % MAP_DEFS[current_map]["name"])
+		_log("After days of journey east, you return to %s." % map_name(current_map))
 	elif tile == "O" and def.has("down"):
 		_load_map(def["down"], "descend")
 		_sfx("stairs")
-		_log("You descend the sunken stairway into the %s." % MAP_DEFS[current_map]["name"])
+		_log("You descend the sunken stairway into the %s." % map_name(current_map))
 	elif tile == "U" and def.has("up"):
 		_load_map(def["up"], "ascend")
 		_sfx("stairs")
-		_log("You climb back up to the %s." % MAP_DEFS[current_map]["name"])
+		_log("You climb back up to the %s." % map_name(current_map))
 	else:
 		return false
 	_refresh()
@@ -1826,28 +1937,13 @@ func _complete_quest(q: Dictionary) -> void:
 	_sfx("quest")
 	_log("Quest complete: %s! Reward: %s." % [q["desc"], ", ".join(reward_bits)])
 	_gain_xp(q["reward_xp"])
-	if q.get("opens_west", false):
-		_open_west_gate()
+	if q.get("target", "") == "parchment":
+		# the reveal: Dolm reads the parchment in the refugee camp
+		_log("Dolm turns pale as he reads. 'This is no treasure map.'")
+		_log("'It is a page of the Covenant - the seal that bound the Grey Fortress.'")
+		_log("'We broke it. The dead marched out, and our town paid the price.'")
+		_log("'Beyond the boarded gate, the road climbs to the Fortress itself.'")
 	_check_victory()
-
-# Carves the west gate into the (already generated) town map and
-# connects it to the plaza. Called when the Sunstone Relic quest is
-# turned in, and again after loading a save where it was done.
-func _open_west_gate() -> void:
-	if not map_state.has("town"):
-		return
-	var st: Dictionary = map_state["town"]
-	if st["west_gate"].x >= 0:
-		return   # already open
-	var g: Array = st["grid"]
-	var gy: int = g.size() / 2
-	for y in range(gy - 1, gy + 3):
-		for x in range(1, 7):
-			g[y][x] = "."
-	g[gy][0] = "<"
-	g[gy + 1][0] = "<"
-	st["west_gate"] = Vector2i(0, gy)
-	_log("The west gate of town rumbles open!")
 
 func _check_victory() -> void:
 	for q in quests:
@@ -1903,14 +1999,85 @@ func _use_item(id: String) -> void:
 			_sfx("drink")
 			player_mana = min(player_mana + item["mana_heal"], player_max_mana)
 			_log("You drink the %s. (+%d mana, now %d/%d)" % [item["name"], item["mana_heal"], player_mana, player_max_mana])
+	elif item.has("portal"):
+		_cast_town_portal(id)
 	else:
 		_log("The %s cannot be used." % item["name"])
 	_refresh()
 
+
+# ---------------------------------------------------------
+#  Town portal (a la Diablo): using a scroll teleports you home
+#  at once and leaves a shimmering portal there; stepping into
+#  it returns you to the very tile you cast from, then it
+#  closes. One round trip per scroll.
+# ---------------------------------------------------------
+func portal_home() -> String:
+	return "west" if town_burned else "town"
+
+func _cast_town_portal(id: String) -> void:
+	var home := portal_home()
+	if current_map == home:
+		_log("You are already home. The scroll stays in your pack.")
+		return
+	_remove_item(id)
+	if not portal.is_empty():
+		_log("Your old portal winks shut.")
+	portal = { "map": current_map, "pos": player_pos, "home": home }
+	_sfx("cast")
+	_load_map(home, "spawn")
+	portal["home_pos"] = map_state[home]["spawn"] + Vector2i(2, 0)
+	_log("The scroll burns away, and the world folds: you are home.")
+	_log("A shimmering portal waits to carry you back.")
+	if mode != Mode.PLAY:
+		_close_panel()
+
+func _travel_portal() -> void:
+	var dest: String = portal["map"]
+	player_pos = portal["pos"]
+	portal = {}
+	_sfx("stairs")
+	_load_map(dest, "keep")
+	_log("The portal folds shut behind you.")
+	_refresh()
+
+# ---- backpack categories: no more potions rubbing elbows with
+# swords. Weapons, Armour, Consumables, Quest Items - in that order.
+const ITEM_CATEGORIES := ["Weapons", "Armour", "Consumables", "Quest Items"]
+
+func item_category(id: String) -> int:
+	var it: Dictionary = ITEMS[id]
+	if it.get("quest", false):
+		return 3
+	if it.has("slot"):
+		return 0 if (it.has("dmg") or it.has("spell_dmg")) else 1
+	return 2   # heal, mana and portal scrolls
+
+# Backpack ids grouped by category, alphabetical inside each. Shop
+# sell lists inherit the same order.
 func inventory_list() -> Array:
 	var keys := inventory.keys()
-	keys.sort()
+	keys.sort_custom(func(a, b):
+		var ca := item_category(a)
+		var cb := item_category(b)
+		if ca != cb:
+			return ca < cb
+		return ITEMS[a]["name"] < ITEMS[b]["name"])
 	return keys
+
+# The backpack as one flat list of rows: category headers with their
+# items beneath. hud.gd draws this list and _char_sheet_click
+# hit-tests the same rows, so the two can never drift apart.
+func backpack_entries() -> Array:
+	var entries := []
+	var last := -1
+	for id in inventory_list():
+		var cat := item_category(id)
+		if cat != last:
+			last = cat
+			entries.append({ "kind": "header", "text": ITEM_CATEGORIES[cat] })
+		entries.append({ "kind": "item", "id": id })
+	return entries
 
 func inv_capacity() -> int:
 	var cap := BASE_INV_SLOTS
@@ -2088,8 +2255,12 @@ func _save_game() -> void:
 	var qs := []
 	for q in quests:
 		qs.append({ "state": q["state"], "progress": q["progress"] })
+	var portal_data := {}
+	if not portal.is_empty():
+		portal_data = { "map": portal["map"], "x": portal["pos"].x, "y": portal["pos"].y,
+				"home": portal["home"], "hx": portal["home_pos"].x, "hy": portal["home_pos"].y }
 	var data := {
-		"version": 1,
+		"version": 2,
 		"base_max_hp": base_max_hp, "base_dmg": base_dmg, "base_max_mana": base_max_mana,
 		"player_level": player_level, "player_xp": player_xp,
 		"player_hp": player_hp, "player_mana": player_mana,
@@ -2098,6 +2269,8 @@ func _save_game() -> void:
 		"current_map": current_map, "px": player_pos.x, "py": player_pos.y,
 		"move_count": move_count, "run_start_text": run_start_text,
 		"active_spell": active_spell,
+		"parchment_found": parchment_found, "town_burned": town_burned,
+		"portal": portal_data,
 		"visited": visited.keys(), "maps": maps,
 	}
 	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
@@ -2150,6 +2323,15 @@ func _load_game() -> void:
 	for i in mini(quests.size(), data["quests"].size()):
 		quests[i]["state"] = data["quests"][i]["state"]
 		quests[i]["progress"] = int(data["quests"][i]["progress"])
+	# Story flags come before map regeneration: the town generates
+	# burned or whole depending on them. Saves from the relic era
+	# (before the parchment) had the west unlocked by Dolm's quest,
+	# which in the new story means the burning already happened.
+	parchment_found = data.get("parchment_found", false)
+	town_burned = data.get("town_burned", false)
+	if not town_burned and quests[3]["state"] == "done":
+		parchment_found = true
+		town_burned = true
 	buyback = {}
 	for key in data["buyback"]:
 		var bb := []
@@ -2184,9 +2366,11 @@ func _load_game() -> void:
 				for x in mini(s.length(), row.size()):
 					if s[x] == "1":
 						row[x] = 1
-	for q in quests:
-		if q["state"] == "done" and q.get("opens_west", false):
-			_open_west_gate()
+	portal = {}
+	var pd: Dictionary = data.get("portal", {})
+	if not pd.is_empty() and MAP_DEFS.has(pd.get("map", "")):
+		portal = { "map": pd["map"], "pos": Vector2i(int(pd["x"]), int(pd["y"])),
+				"home": pd["home"], "home_pos": Vector2i(int(pd["hx"]), int(pd["hy"])) }
 	player_pos = Vector2i(int(data["px"]), int(data["py"]))
 	_load_map(data["current_map"], "keep")
 	_recalc_stats()
@@ -2434,6 +2618,8 @@ func _update_music() -> void:
 		combat_heat -= 1
 	if combat_heat > 0:
 		_play_track("combat")
+	elif current_map == "town" and town_burned:
+		_play_track("ruins")   # no more waltzes in the ashes
 	else:
 		_play_track(MAP_DEFS[current_map]["music"])
 
@@ -2530,8 +2716,9 @@ func _is_walkable(p: Vector2i) -> bool:
 		return false
 	return grid[p.y][p.x] in [".", "D", "^", "v", "<", ">", "O", "U"]
 
-# Tiles that stop a projectile's flight (trees, all kinds of walls).
-const BLOCKS_FLIGHT := ["#", "T", "H", "S", "B"]
+# Tiles that stop a projectile's flight (trees, all kinds of walls,
+# rubble, burnt trunks, tents).
+const BLOCKS_FLIGHT := ["#", "T", "H", "S", "B", "R", "F", "E"]
 
 # First blocking tile strictly between `from` and `to` (Bresenham),
 # or Vector2i(-1, -1) if the line is clear. The endpoints themselves
@@ -2611,6 +2798,8 @@ func _draw() -> void:
 			_draw_tile(x, y)
 
 	var view := Rect2i(x0, y0, x1 - x0 + 1, y1 - y0 + 1)
+	if not portal.is_empty() and current_map == portal["home"]:
+		_draw_portal()
 	for it in ground_items:
 		if view.has_point(it["pos"]):
 			_draw_ground_item(it)
@@ -2683,6 +2872,28 @@ func _draw_tile(x: int, y: int) -> void:
 			draw_line(pos + Vector2(4, 6), pos + Vector2(TILE - 4, TILE - 6), Color(0.48, 0.36, 0.18), 3.0)
 			draw_line(pos + Vector2(4, TILE - 6), pos + Vector2(TILE - 4, 6), Color(0.48, 0.36, 0.18), 3.0)
 			draw_rect(Rect2(pos + Vector2(3, 13), Vector2(TILE - 6, 5)), Color(0.55, 0.42, 0.22))
+		"R":
+			# charred rubble: broken black walls, embers still winking
+			draw_rect(inner, Color(0.11, 0.10, 0.10))
+			draw_rect(Rect2(pos + Vector2(4, 15), Vector2(11, 9)), Color(0.17, 0.16, 0.15))
+			draw_rect(Rect2(pos + Vector2(18, 7), Vector2(9, 13)), Color(0.15, 0.14, 0.13))
+			draw_circle(pos + Vector2(9, 11), 1.2, Color(0.95, 0.45, 0.10, 0.8))
+			draw_circle(pos + Vector2(23, 23), 1.0, Color(0.95, 0.30, 0.08, 0.6))
+		"F":
+			# burnt tree: a bare blackened trunk, branches like claws
+			draw_rect(Rect2(pos + Vector2(14, 9), Vector2(4, 21)), Color(0.11, 0.09, 0.08))
+			draw_line(pos + Vector2(16, 13), pos + Vector2(8, 5), Color(0.11, 0.09, 0.08), 2.2)
+			draw_line(pos + Vector2(16, 15), pos + Vector2(24, 6), Color(0.11, 0.09, 0.08), 2.2)
+			draw_line(pos + Vector2(12, 9), pos + Vector2(10, 12), Color(0.11, 0.09, 0.08), 1.4)
+		"E":
+			# refugee tent: canvas over a ridgepole, a dark opening
+			draw_colored_polygon(PackedVector2Array([
+				pos + Vector2(16, 4), pos + Vector2(29, 28), pos + Vector2(3, 28)]),
+				Color(0.62, 0.54, 0.38))
+			draw_line(pos + Vector2(16, 4), pos + Vector2(16, 28), Color(0.45, 0.38, 0.25), 1.5)
+			draw_colored_polygon(PackedVector2Array([
+				pos + Vector2(16, 14), pos + Vector2(21, 28), pos + Vector2(11, 28)]),
+				Color(0.16, 0.13, 0.09))
 		"O", "U":
 			# stairways: shrinking steps into darkness (O, down) or
 			# widening steps toward the light (U, up)
@@ -2693,20 +2904,36 @@ func _draw_tile(x: int, y: int) -> void:
 						else Color(0.30, 0.30, 0.36).lightened(i * 0.16)
 				draw_rect(Rect2(pos + Vector2((TILE - sw) * 0.5, 5.0 + i * 6.0), Vector2(sw, 5.0)), step_col)
 
+# The town portal: a swirling blue oval standing in the home village.
+func _draw_portal() -> void:
+	var c := Vector2(portal["home_pos"]) * TILE + Vector2(TILE, TILE) * 0.5
+	var t := Time.get_ticks_msec() / 1000.0
+	draw_set_transform(c, 0.0, Vector2(0.62, 1.0))
+	draw_circle(Vector2.ZERO, 14.5, Color(0.25, 0.45, 0.95, 0.22))
+	draw_circle(Vector2.ZERO, 11.0, Color(0.35, 0.60, 1.0, 0.50))
+	draw_circle(Vector2.ZERO, 8.0, Color(0.70, 0.86, 1.0, 0.85))
+	draw_circle(Vector2.ZERO, 4.5, Color(0.95, 0.99, 1.0))
+	for i in 3:
+		var a := t * 2.4 + i * TAU / 3.0
+		draw_arc(Vector2.ZERO, 12.5, a, a + 1.6, 10, Color(0.55, 0.75, 1.0, 0.9), 1.8)
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
 # Every unique piece of world loot gets its own little icon, matching
-# its description (the relic's sun, the crown's prongs, a pair of
+# its description (the parchment's wax seal, the crown's prongs, a pair of
 # boots...). A soft gold halo behind each keeps them easy to spot.
 func _draw_ground_item(it: Dictionary) -> void:
 	var mid := Vector2(it["pos"]) * TILE + Vector2(TILE, TILE) * 0.5
 	draw_circle(mid, 11.0, Color(1.0, 0.88, 0.35, 0.20))
 	match it["id"]:
-		"relic":   # the Sunstone: a warm sun, rays and all
-			for i in 8:
-				var a := i * PI / 4.0
-				draw_line(mid + Vector2(cos(a), sin(a)) * 5.5,
-						mid + Vector2(cos(a), sin(a)) * 9.0, Color(1.0, 0.72, 0.15), 1.6)
-			draw_circle(mid, 5.0, Color(1.0, 0.62, 0.10))
-			draw_circle(mid, 2.4, Color(1.0, 0.90, 0.55))
+		"parchment":  # a rolled scroll, sealed with grey wax
+			draw_rect(Rect2(mid + Vector2(-8, -5), Vector2(16, 10)), Color(0.87, 0.81, 0.63))
+			draw_rect(Rect2(mid + Vector2(-8, -5), Vector2(2.5, 10)), Color(0.71, 0.64, 0.46))
+			draw_rect(Rect2(mid + Vector2(5.5, -5), Vector2(2.5, 10)), Color(0.71, 0.64, 0.46))
+			for i in 3:
+				draw_line(mid + Vector2(-4, -2.4 + i * 2.4), mid + Vector2(3.5, -2.4 + i * 2.4),
+						Color(0.44, 0.40, 0.32), 0.8)
+			draw_circle(mid + Vector2(0, 5.5), 2.6, Color(0.46, 0.46, 0.52))
+			draw_circle(mid + Vector2(0, 5.5), 1.1, Color(0.62, 0.62, 0.68))
 		"crown":   # the Sunken Crown: gold band, three prongs, a red gem
 			for px in [-5.0, 0.0, 5.0]:
 				draw_colored_polygon(PackedVector2Array([

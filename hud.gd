@@ -259,7 +259,8 @@ const MINI_TILE_COLORS := {
 	"^": Color(0.85, 0.78, 0.55), "v": Color(0.85, 0.78, 0.55),
 	"<": Color(0.85, 0.78, 0.55), ">": Color(0.85, 0.78, 0.55),
 	"B": Color(0.40, 0.30, 0.15), "O": Color(0.04, 0.04, 0.06),
-	"U": Color(0.80, 0.78, 0.72),
+	"U": Color(0.80, 0.78, 0.72), "R": Color(0.16, 0.15, 0.14),
+	"F": Color(0.11, 0.09, 0.08), "E": Color(0.62, 0.54, 0.38),
 }
 const FOG_COLOR := Color(0.05, 0.05, 0.07)
 
@@ -269,7 +270,7 @@ func _build_minimap() -> void:
 	var gh: int = g.size()
 	mini_zoom = clamp(int(min(180.0 / gw, 126.0 / gh)), 1, 4)
 	var def: Dictionary = game.MAP_DEFS[game.current_map]
-	var floor_col: Color = def["tint"]
+	var floor_col: Color = game.map_tint(game.current_map)
 	var wall_col: Color = def.get("palette", {}).get("wall", Color(0.45, 0.45, 0.50))
 	# fog of war: tiles never shown on screen stay dark (villages exempt)
 	var fog: bool = not def.get("no_fog", false)
@@ -297,7 +298,7 @@ func _draw_minimap() -> void:
 	var pad := 7.0
 	var tw: float = mini_tex.get_width()
 	var th: float = mini_tex.get_height()
-	var label: String = game.MAP_DEFS[game.current_map]["name"]
+	var label: String = game.map_name(game.current_map)
 	var label_w: float = font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x
 	var w: float = max(tw, label_w) + pad * 2
 	var h: float = th + pad * 2 + 17.0
@@ -377,12 +378,11 @@ func _draw_panel_worldmap() -> void:
 		var center: Vector2 = origin + layout[id] * cell
 		var r := Rect2(center - node_size * 0.5, node_size)
 		if shown[id] == "known":
-			var def: Dictionary = game.MAP_DEFS[id]
-			draw_rect(r, def["tint"])
+			draw_rect(r, game.map_tint(id))
 			var cur: bool = id == game.current_map
 			draw_rect(r, Color(0.95, 0.82, 0.25) if cur else Color(0.55, 0.55, 0.62),
 					false, 2.0 if cur else 1.0)
-			var label: String = def["name"]
+			var label: String = game.map_name(id)
 			var lw: float = font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x
 			draw_string(font, center + Vector2(-lw * 0.5, -2 if cur else 5), label,
 					HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.95, 0.93, 0.85))
@@ -468,26 +468,35 @@ func _draw_panel_character() -> void:
 	draw_string(font, Vector2(inv_x, p.y + 44), "Backpack  %d/%d slots     Coins %d"
 			% [game.inventory.size(), game.inv_capacity(), game.coins],
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.8, 0.78, 0.65))
-	var list: Array = game.inventory_list()
-	if list.is_empty():
+	# One flat row list: category headers with their items beneath.
+	# Geometry mirrors _char_sheet_click in main.gd (16 px rows).
+	var entries: Array = game.backpack_entries()
+	if entries.is_empty():
 		draw_string(font, Vector2(inv_x, top + 4), "Your pack is empty.",
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.55, 0.55, 0.6))
-	for i in list.size():
-		var yy := top + i * 17.0
-		var id: String = list[i]
+	var item_i := 0
+	for i in entries.size():
+		var yy := top + i * 16.0
+		var e: Dictionary = entries[i]
+		if e["kind"] == "header":
+			draw_string(font, Vector2(inv_x, yy), e["text"],
+					HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.85, 0.72, 0.35))
+			continue
+		var id: String = e["id"]
 		var it: Dictionary = game.ITEMS[id]
-		var selected: bool = game.mode == game.Mode.INVENTORY and game.ui_pane == 1 and game.ui_index == i
+		var selected: bool = game.mode == game.Mode.INVENTORY and game.ui_pane == 1 and game.ui_index == item_i
 		if selected:
-			draw_rect(Rect2(inv_x - 6, yy - 12, 450, 16), Color(0.22, 0.26, 0.36))
-		var usable: bool = it.has("heal") or it.has("mana_heal")
+			draw_rect(Rect2(inv_x + 8, yy - 12, 444, 15), Color(0.22, 0.26, 0.36))
+		var usable: bool = it.has("heal") or it.has("mana_heal") or it.has("portal")
 		var tag := ""
 		if it.has("slot"):
 			tag = "  [" + game.SLOT_NAMES[it["slot"]] + "]"
 		elif usable:
 			tag = "  [use]"
-		draw_string(font, Vector2(inv_x, yy), "%s x%d%s - %s" % [it["name"], game.inventory[id], tag, it["desc"]],
+		draw_string(font, Vector2(inv_x + 14, yy), "%s x%d%s - %s" % [it["name"], game.inventory[id], tag, it["desc"]],
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 12,
 				Color(0.85, 0.85, 0.88) if (it.has("slot") or usable) else Color(0.62, 0.62, 0.68))
+		item_i += 1
 
 	draw_string(font, Vector2(p.x + 16, p.y + h - 14),
 			"Up/Down: select     Left/Right: switch side     Enter: equip / use / remove     Esc / right click / I: close",
@@ -555,7 +564,7 @@ func _draw_targeting() -> void:
 # ---------------- quest journal ----------------
 func _draw_panel_journal() -> void:
 	# Build each line first, then size the box to the widest one so
-	# long quest names (e.g. the Sunstone Relic) never overflow.
+	# long quest names (e.g. the Mysterious Parchment) never overflow.
 	var lines := []
 	for q in game.quests:
 		var text := ""
@@ -669,7 +678,7 @@ func _draw_game_over() -> void:
 	draw_rect(Rect2(px - 4, py - 4, w + 8, h + 8), Color(0.42, 0.28, 0.26))
 	draw_rect(Rect2(px, py, w, h), Color(0.10, 0.06, 0.06, 0.96))
 
-	var text := "You died in %s" % game.MAP_DEFS[game.current_map]["name"]
+	var text := "You died in %s" % game.map_name(game.current_map)
 	var tw: float = font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 24).x
 	draw_string(font, Vector2(px + (w - tw) * 0.5, py + 42), text,
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 24, Color(0.9, 0.72, 0.66))

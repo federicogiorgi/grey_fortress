@@ -57,11 +57,16 @@ func _run(game: Node2D) -> void:
 				_check(game.MAP_DEFS.has(def[link]),
 						"%s's %s link goes somewhere real" % [id, link])
 		if def.has("cave"):
-			_check(st["items"].size() == 1 and st["items"][0]["id"] == def["loot"],
-					"%s holds its loot (%s)" % [id, def.get("loot", "?")])
-			var lp: Vector2i = st["items"][0]["pos"]
-			_check(lp.x < def["w"] - 10 or lp.y < def["h"] - 8,
-					"%s loot avoids the minimap corner" % id)
+			var ids := []
+			for entry in st["items"]:
+				ids.append(entry["id"])
+				var lp: Vector2i = entry["pos"]
+				_check(lp.x < def["w"] - 10 or lp.y < def["h"] - 8,
+						"%s %s avoids the minimap corner" % [id, entry["id"]])
+			_check(def["loot"] in ids, "%s holds its loot (%s)" % [id, def.get("loot", "?")])
+			if def.has("quest_loot"):
+				_check(def["quest_loot"] in ids,
+						"%s holds its quest item (%s)" % [id, def["quest_loot"]])
 			if def.has("down"):
 				_check(st["stairs_down"].x >= 0, "%s has a stairway down" % id)
 				_check(st["stairs_down"].x < def["w"] - 10 or st["stairs_down"].y < def["h"] - 8,
@@ -121,6 +126,54 @@ func _run(game: Node2D) -> void:
 	_check(game.quests[game.VENDORS.size() + 7]["state"] == "done", "Pell's bread quest completes")
 	_check(game.inventory.get("bread", 0) == 0, "the bread was handed over")
 	_check(game.inventory.get("pie", 0) == 2, "the pie reward arrived")
+
+	# the backpack groups items under category headers
+	game.inventory = {}
+	game._add_item("sword")
+	game._add_item("bread")
+	game._add_item("chain")
+	var cats := []
+	for e in game.backpack_entries():
+		if e["kind"] == "header":
+			cats.append(e["text"])
+	_check(cats == ["Weapons", "Armour", "Consumables"], "backpack groups by category")
+	_check(game.item_category("parchment") == 3, "the parchment counts as a quest item")
+	_check(game.item_category("wand") == 0, "wands count as weapons")
+	_check(game.item_category("tpscroll") == 2, "portal scrolls count as consumables")
+
+	# town portal: cast in the wilds, then step through to come back
+	game._load_map("wilds", "spawn")
+	var cast_pos: Vector2i = game.player_pos
+	game._add_item("tpscroll")
+	game._use_item("tpscroll")
+	_check(game.current_map == "town", "the portal scroll drops you home")
+	_check(not game.portal.is_empty(), "a return portal stands open at home")
+	var hp: Vector2i = game.portal["home_pos"]
+	game.player_pos = hp + Vector2i(-1, 0)
+	game._try_player_move(Vector2i(1, 0))
+	_check(game.current_map == "wilds" and game.player_pos == cast_pos,
+			"stepping through returns you to the cast tile")
+	_check(game.portal.is_empty(), "the portal closes after the round trip")
+
+	# the fall of Grey Fortress: returning with the parchment burns it
+	_check(not game.town_burned, "the town starts whole")
+	game._add_item("parchment")
+	game.parchment_found = true
+	game._load_map("town", "spawn")
+	_check(game.town_burned, "coming home with the parchment burns the town")
+	_check(game.vendors.is_empty(), "the burned town is deserted")
+	_check(game.map_state["town"]["west_gate"].x >= 0, "the west gate hangs broken open")
+	_check(game.altar_positions.size() > 0, "the temple altar survived the fire")
+	_check(game.map_name("town") == "Ruins of Grey Fortress", "the town is renamed in its ruin")
+	_check(game.portal_home() == "west", "portals now lead to Westmere")
+
+	# the survivors trade on in the Westmere refugee camp
+	game._load_map("west", "spawn")
+	_check(game.vendors.size() == 12, "Westmere holds 8 locals and 4 refugees")
+	game._talk_to_vendor(11)  # Dolm, in exile: activates his quest
+	game._talk_to_vendor(11)  # and hands over the parchment
+	_check(game.quests[3]["state"] == "done", "Dolm receives the parchment in exile")
+	_check(game.inventory.get("armor", 0) == 1, "the Leather Armor reward arrived")
 
 	if failures == 0:
 		print("smoke test: all checks passed")
