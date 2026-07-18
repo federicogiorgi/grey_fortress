@@ -17,6 +17,15 @@ extends Node2D
 #   - The backpack is grouped into categories: Weapons, Armour,
 #     Consumables and Quest Items, with headers in the character
 #     sheet (and the same order in shop sell lists)
+#   - Dolm dies in the fire: the parchment is delivered by walking
+#     over his body in his burned shop (gold "?" marks it); quest
+#     marks float over every giver ("!" waiting, "?" turn-in)
+#   - The journal groups quests by area and hides unmet givers;
+#     an intro parchment opens new runs (skippable, with an
+#     Options toggle to skip it forever)
+#   - Sable the scribe sells portal scrolls in Westmere (Tobin
+#     runs the merged butcher-bakery); mobs rarely drop potions
+#     and portal scrolls; the ruins stairway got its shrine
 #
 #  v9: Westmere's eight vendors got real shops and quests (12
 #  quests total), spell-damage wands, Bone Hollow + bone knights,
@@ -30,7 +39,7 @@ extends Node2D
 #  v4: unique vendors, sell/buyback, victory, clickable HUD.
 # =============================================================
 
-enum Mode { TITLE, PLAY, INVENTORY, JOURNAL, SHOP, OPTIONS, SPELLBOOK, WORLDMAP }
+enum Mode { TITLE, INTRO, PLAY, INVENTORY, JOURNAL, SHOP, OPTIONS, SPELLBOOK, WORLDMAP }
 
 const TILE := 32
 const BAR_H := 84                 # must match hud.gd
@@ -283,7 +292,7 @@ const VENDORS := [
 		"greet": "Cyra: Potions brewing. Do not rush art.",
 		"quest": { "desc": "Bring me 10 coins", "type": "coins", "need": 10,
 				"intro": "Reagents are expensive. Fund my research with 10 coins?",
-				"reward_items": { "potion": 2 }, "reward_xp": 20 },
+				"reward_items": { "potion": 2, "tpscroll": 2 }, "reward_xp": 20 },
 	},
 	{
 		"name": "Dolm the trader", "short": "Dolm", "symbol": "bag",
@@ -301,17 +310,20 @@ const VENDORS := [
 # buyback{} and current_shop; see vendor_def().
 const WEST_VENDORS := [
 	{
+		# Wren also carries the cloaks and packs that used to be
+		# Dolm's trade: someone had to, after the fire.
 		"name": "Wren the weaver",    "short": "Wren",  "symbol": "bag",
-		"stock": ["shirt", "sshirt", "tabard"],
+		"stock": ["shirt", "sshirt", "cloak", "fcloak", "tabard", "bag", "lbag"],
 		"greet": "Wren: Finest cloth west of the fortress.",
 		"quest": { "desc": "Kill 4 wolves", "type": "kill", "target": "w", "need": 4,
 				"intro": "My looms want wool, but the wolves in the Dark Forest have gotten bold. Cull 4 of them?",
 				"reward_coins": 30, "reward_xp": 20 },
 	},
 	{
-		"name": "Tobin the butcher",  "short": "Tobin", "symbol": "bread",
-		"stock": ["sausage", "ham"],
-		"greet": "Tobin: Best cuts this side of the mountains.",
+		# Tobin and Pell joined forces: meat and bread under one roof.
+		"name": "Tobin the provisioner", "short": "Tobin", "symbol": "bread",
+		"stock": ["sausage", "ham", "bread", "pie"],
+		"greet": "Tobin: Meat and bread under one roof - Pell and I joined forces.",
 		"quest": { "desc": "Kill 3 wild boars", "type": "kill", "target": "b", "need": 3,
 				"intro": "The boars in the Northern Wilds trampled my pens. Bring down 3 and the smokehouse pays you back.",
 				"reward_items": { "ham": 2 }, "reward_xp": 20 },
@@ -333,8 +345,9 @@ const WEST_VENDORS := [
 				"reward_coins": 50, "reward_xp": 35 },
 	},
 	{
+		# Sela inherited the ring trade from poor Dolm's ashes.
 		"name": "Sela the jeweler",   "short": "Sela",  "symbol": "bag",
-		"stock": ["pendant", "amulet", "gring"],
+		"stock": ["ring", "sring", "gring", "pendant", "amulet"],
 		"greet": "Sela: Gems from the caravan, fresh this week.",
 		"quest": { "desc": "Bring me 30 coins", "type": "coins", "need": 30,
 				"intro": "The caravan finally came - and emptied my coffers. Invest 30 coins and keep the first piece I finish?",
@@ -357,12 +370,12 @@ const WEST_VENDORS := [
 				"reward_items": { "gmpotion": 2 }, "reward_xp": 20 },
 	},
 	{
-		"name": "Pell the baker",     "short": "Pell",  "symbol": "bread",
-		"stock": ["bread", "pie"],
-		"greet": "Pell: The oven is finally lit. Alda sends her regards.",
-		"quest": { "desc": "Bring 3 Fresh Bread", "type": "item", "target": "bread", "need": 3,
-				"intro": "I must know what Alda puts in her dough. Bring me 3 of her Fresh Bread to compare?",
-				"reward_items": { "pie": 2 }, "reward_xp": 15 },
+		"name": "Sable the scribe",   "short": "Sable", "symbol": "scroll",
+		"stock": ["tpscroll"],
+		"greet": "Sable: Ink, wax, and ways home. Scrolls for the prepared.",
+		"quest": { "desc": "Kill 4 wraiths", "type": "kill", "target": "y", "need": 4,
+				"intro": "My portal ink calls for wraith-essence. Put 4 of the crypt's wraiths to rest for me?",
+				"reward_items": { "tpscroll": 3 }, "reward_xp": 30 },
 	},
 ]
 
@@ -473,6 +486,7 @@ var opt_rebinding := false
 var opt_bind_slot := 0    # which of the two keybind slots is being edited
 var opt_slider_dragging := false
 var master_volume := 1.0
+var skip_intro := false   # options toggle: skip the intro parchment
 var visited := {}         # maps the player has entered at least once
 var banner_text := ""
 var banner_timer := 0.0
@@ -554,7 +568,9 @@ func _show_title() -> void:
 	_play_track("title")
 	_refresh()
 
-func _start() -> void:
+# from_title: only the title screen's New Game shows the intro
+# parchment (death restarts and save loads go straight to play).
+func _start(from_title := false) -> void:
 	base_max_hp = 12
 	base_dmg = 1
 	base_max_mana = 10
@@ -597,6 +613,12 @@ func _start() -> void:
 	_log("Welcome to Grey Fortress.")
 	_log("Arrows/WASD move. I character, J journal, P spells, M map, O options.")
 	_update_music()
+	if from_title and not skip_intro:
+		mode = Mode.INTRO
+	_refresh()
+
+func _close_intro() -> void:
+	mode = Mode.PLAY
 	_refresh()
 
 func _refresh() -> void:
@@ -794,7 +816,8 @@ func _load_map(id: String, arrive: String) -> void:
 		flash_alpha = 1.0
 		thunder_player.play()
 		_log("You return to a nightmare: every roof is fallen, every wall charred.")
-		_log("On a scorched door, a hasty scrawl: 'Gone west. Find us. - Dolm'")
+		_log("On a scorched door, a hasty scrawl: 'Gone west. Find us. - Alda'")
+		_log("Not every door bears a message. Some are simply silent.")
 
 func _generate_map(id: String) -> Dictionary:
 	var def: Dictionary = MAP_DEFS[id]
@@ -919,11 +942,12 @@ func _generate_map(id: String) -> Dictionary:
 		for y in range(1, 5):
 			for x in range(gx - 1, gx + 3):
 				g[y][x] = "."
-		# The refugee camp: the four town vendors, tents pitched on
-		# the green above the temple. Westmere is only reachable after
-		# the town burns, so they are always here.
-		for i in 4:
-			var cx := 8 + i * 9
+		# The refugee camp: the town vendors who made it out - Alda,
+		# Borin and Cyra - tents pitched on the green above the
+		# temple. Dolm did not; he lies in his burned shop. Westmere
+		# is only reachable after the fall, so the camp is always here.
+		for i in 3:
+			var cx := 12 + i * 9
 			g[23][cx] = "E"
 			vs.append({ "pos": Vector2i(cx, 24), "set_idx": i, "set": "town" })
 
@@ -954,12 +978,21 @@ func _generate_map(id: String) -> Dictionary:
 		for x in range(min(ox + 4, gx - 7), max(ox + 4, gx + 7) + 1):
 			g[cy][x] = "."
 
-	# 7c. The sunken stairway down to the crypt (ruins only).
+	# 7c. The sunken stairway down to the crypt (ruins only), housed
+	# inside a ruined shrine: stone walls, one south door, and the
+	# stairs at its heart.
 	var stairs_down := Vector2i(-1, -1)
 	if def.has("down"):
-		_clear_area(g, 96, 22, 7, 6)
-		g[24][99] = "O"
-		stairs_down = Vector2i(99, 24)
+		_clear_area(g, 94, 19, 11, 9)
+		for x in range(96, 103):
+			g[21][x] = "S"
+			g[25][x] = "S"
+		for y in range(22, 25):
+			g[y][96] = "S"
+			g[y][102] = "S"
+		g[25][99] = "D"
+		g[23][99] = "O"
+		stairs_down = Vector2i(99, 23)
 
 	# 8. Gates, with a small clearing around each.
 	var north_gate := Vector2i(-1, -1)
@@ -1086,10 +1119,13 @@ func _place_house(g: Array, x0: int, y0: int, vs: Array, set_name: String = "tow
 	vs.append({ "pos": Vector2i(x0 + 2, y0 + 1), "set_idx": vs.size(), "set": set_name })
 
 # The charred shell of a 5x4 house: its wall line with fire-eaten
-# gaps, no door, no vendor. Used by the burned town.
+# gaps, no vendor. Where the door was stays open, so the shell can
+# always be entered. Used by the burned town.
 func _place_burned_house(g: Array, x0: int, y0: int, rng: RandomNumberGenerator) -> void:
 	for x in range(x0, x0 + 5):
 		for y in [y0, y0 + 3]:
+			if y == y0 + 3 and x == x0 + 2:
+				continue   # the doorway
 			if rng.randf() < 0.7:
 				g[y][x] = "R"
 	for y in range(y0 + 1, y0 + 3):
@@ -1208,6 +1244,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 
 	match mode:
+		Mode.INTRO:
+			_close_intro()
 		Mode.PLAY:
 			_play_input(event.keycode)
 		Mode.INVENTORY:
@@ -1240,6 +1278,8 @@ func _handle_right_click() -> void:
 		_refresh()
 		return
 	match mode:
+		Mode.INTRO:
+			_close_intro()
 		Mode.PLAY:
 			if targeting:
 				_cancel_targeting()
@@ -1269,6 +1309,9 @@ func _handle_click(mp: Vector2) -> void:
 	if victory_banner:
 		victory_banner = false
 		_refresh()
+		return
+	if mode == Mode.INTRO:
+		_close_intro()
 		return
 	if mode == Mode.PLAY and targeting:
 		_try_fire_click(mp)
@@ -1776,6 +1819,8 @@ func _try_player_move(dir: Vector2i) -> void:
 	elif _is_walkable(target):
 		player_pos = target
 		_pickup_items()
+		if town_burned and current_map == "town" and player_pos == DOLM_BODY:
+			_visit_dolm_body()
 		if not portal.is_empty() and current_map == portal["home"] and player_pos == portal["home_pos"]:
 			_travel_portal()
 			return
@@ -1795,11 +1840,20 @@ func _damage_mob(index: int, dmg: int, verb: String) -> void:
 	var t: Dictionary = MOB_TYPES[mob["type"]]
 	mob["hp"] -= dmg
 	if mob["hp"] <= 0:
+		var mpos: Vector2i = mob["pos"]
 		mobs.remove_at(index)
 		var drop := randi_range(t["coins"][0], t["coins"][1])
 		coins += drop
 		_sfx("kill")
 		_log("You slay the %s! +%d coins." % [t["name"], drop])
+		# rare drops: the fallen sometimes leave something behind
+		var roll := randf()
+		if roll < 0.03:
+			ground_items.append({ "pos": mpos, "id": "tpscroll" })
+			_log("The %s dropped a Scroll of Town Portal!" % t["name"])
+		elif roll < 0.09:
+			ground_items.append({ "pos": mpos, "id": "potion" })
+			_log("The %s dropped a Healing Potion!" % t["name"])
 		_count_kill(mob["type"])
 		_gain_xp(t["xp"])
 	else:
@@ -1937,13 +1991,28 @@ func _complete_quest(q: Dictionary) -> void:
 	_sfx("quest")
 	_log("Quest complete: %s! Reward: %s." % [q["desc"], ", ".join(reward_bits)])
 	_gain_xp(q["reward_xp"])
-	if q.get("target", "") == "parchment":
-		# the reveal: Dolm reads the parchment in the refugee camp
-		_log("Dolm turns pale as he reads. 'This is no treasure map.'")
-		_log("'It is a page of the Covenant - the seal that bound the Grey Fortress.'")
-		_log("'We broke it. The dead marched out, and our town paid the price.'")
-		_log("'Beyond the boarded gate, the road climbs to the Fortress itself.'")
 	_check_victory()
+
+# Dolm did not make it out of the fire. His body lies where his shop
+# stood; walking over it delivers the parchment - the reward waits in
+# his strongbox, and his last note carries the reveal. Once the quest
+# is done, a cairn marks the spot.
+const DOLM_BODY := Vector2i(30, 15)
+
+func _visit_dolm_body() -> void:
+	var q: Dictionary = quests[3]
+	if q["state"] == "done":
+		return
+	if q["state"] == "hidden":
+		q["state"] = "active"   # you understand, now, what he wanted
+	if _quest_fulfilled(q):
+		_log("Dolm lies where his shop stood, shielding his strongbox to the last.")
+		_complete_quest(q)
+		_log("In his hand, a note: 'It is a page of the Covenant that sealed the Fortress.'")
+		_log("'We broke it, and the price was mine. Beyond Westmere's boarded gate - end what we began.'")
+		_log("You pile stones over Dolm the trader. The ashes keep their silence.")
+	else:
+		_log("Dolm the trader lies among the ashes. Whatever he sought, it cost him everything.")
 
 func _check_victory() -> void:
 	for q in quests:
@@ -2211,7 +2280,7 @@ func _title_click(mp: Vector2) -> void:
 func _title_activate(i: int) -> void:
 	match i:
 		0:
-			_start()
+			_start(true)
 		1:
 			if has_save():
 				_load_game()
@@ -2385,7 +2454,7 @@ func _load_game() -> void:
 #  Options: sound (master volume), keybinds, graphics.
 #  Settings persist to user://settings.cfg.
 # ---------------------------------------------------------
-const OPT_MAIN := ["Graphics", "Sound", "Keybinds", "Save Game", "Back"]
+const OPT_MAIN := ["Graphics", "Sound", "Keybinds", "Intro story", "Save Game", "Back"]
 const REBIND_ACTIONS := ["up", "down", "left", "right",
 		"up_left", "up_right", "down_left", "down_right",
 		"wait", "character", "journal", "options",
@@ -2415,10 +2484,15 @@ func _options_input(key: int) -> void:
 					1: options_screen = "sound"
 					2: options_screen = "keybinds"
 					3:
+						skip_intro = not skip_intro
+						_save_settings()
+						_refresh()
+						return
+					4:
 						_save_game()
 						_close_panel()
 						return
-					4:
+					5:
 						_close_panel()
 						return
 				opt_index = 0
@@ -2471,7 +2545,7 @@ func _options_click(mp: Vector2, is_press: bool) -> void:
 			if not is_press:
 				return
 			var w := 420.0
-			var h := 250.0
+			var h := 280.0
 			var px := (vs.x - w) * 0.5
 			var py := (vs.y - BAR_H - h) * 0.5
 			for i in OPT_MAIN.size():
@@ -2483,10 +2557,15 @@ func _options_click(mp: Vector2, is_press: bool) -> void:
 						1: options_screen = "sound"
 						2: options_screen = "keybinds"
 						3:
+							skip_intro = not skip_intro
+							_save_settings()
+							_refresh()
+							return
+						4:
 							_save_game()
 							_close_panel()
 							return
-						4:
+						5:
 							_close_panel()
 							return
 					opt_index = 0
@@ -2552,6 +2631,7 @@ func _save_settings() -> void:
 	var cf := ConfigFile.new()
 	cf.set_value("sound", "master", master_volume)
 	cf.set_value("graphics", "fullscreen", get_window().mode == Window.MODE_FULLSCREEN)
+	cf.set_value("game", "skip_intro", skip_intro)
 	for a in REBIND_ACTIONS:
 		cf.set_value("keys", a, keymap[a])
 	cf.save("user://settings.cfg")
@@ -2561,6 +2641,7 @@ func _load_settings() -> void:
 	if cf.load("user://settings.cfg") != OK:
 		return
 	master_volume = cf.get_value("sound", "master", 1.0)
+	skip_intro = cf.get_value("game", "skip_intro", false)
 	for a in REBIND_ACTIONS:
 		var v = cf.get_value("keys", a, keymap[a])
 		if typeof(v) == TYPE_INT:
@@ -2800,6 +2881,8 @@ func _draw() -> void:
 	var view := Rect2i(x0, y0, x1 - x0 + 1, y1 - y0 + 1)
 	if not portal.is_empty() and current_map == portal["home"]:
 		_draw_portal()
+	if town_burned and current_map == "town" and view.has_point(DOLM_BODY):
+		_draw_dolm_body()
 	for it in ground_items:
 		if view.has_point(it["pos"]):
 			_draw_ground_item(it)
@@ -2904,6 +2987,34 @@ func _draw_tile(x: int, y: int) -> void:
 						else Color(0.30, 0.30, 0.36).lightened(i * 0.16)
 				draw_rect(Rect2(pos + Vector2((TILE - sw) * 0.5, 5.0 + i * 6.0), Vector2(sw, 5.0)), step_col)
 
+# WoW-style quest marks, drawn above quest givers: "!" means a quest
+# waits here, "?" means it is ready to turn in.
+func _draw_quest_mark(center: Vector2, mark: String) -> void:
+	var w: float = font.get_string_size(mark, HORIZONTAL_ALIGNMENT_LEFT, -1, 17).x
+	draw_string(font, center + Vector2(-w * 0.5 + 1, 7), mark,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Color(0, 0, 0, 0.8))
+	draw_string(font, center + Vector2(-w * 0.5, 6), mark,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Color(1.0, 0.85, 0.15))
+
+# Dolm's body in his burned shop (a cairn, once he is at peace).
+func _draw_dolm_body() -> void:
+	var c := Vector2(DOLM_BODY) * TILE + Vector2(TILE, TILE) * 0.5
+	var q: Dictionary = quests[3]
+	if q["state"] == "done":
+		draw_circle(c + Vector2(-5, 4), 4.0, Color(0.42, 0.42, 0.48))
+		draw_circle(c + Vector2(4, 4), 4.5, Color(0.38, 0.38, 0.44))
+		draw_circle(c + Vector2(0, -1), 5.0, Color(0.46, 0.46, 0.52))
+		draw_circle(c + Vector2(0, -6), 3.4, Color(0.52, 0.52, 0.58))
+		return
+	draw_circle(c + Vector2(2, 6), 8.0, Color(0.28, 0.10, 0.08, 0.5))
+	draw_rect(Rect2(c + Vector2(-9, -2), Vector2(13, 6)), Color(0.35, 0.16, 0.14))
+	draw_rect(Rect2(c + Vector2(2, -1), Vector2(7, 4)), Color(0.30, 0.34, 0.42))
+	draw_circle(c + Vector2(-10, 1), 3.4, Color(0.76, 0.59, 0.46))
+	draw_circle(c + Vector2(-1, 6), 2.2, Color(0.95, 0.82, 0.30))
+	draw_circle(c + Vector2(3, 8), 1.8, Color(0.95, 0.82, 0.30))
+	if inventory.get("parchment", 0) > 0:
+		_draw_quest_mark(c + Vector2(0, -16), "?")
+
 # The town portal: a swirling blue oval standing in the home village.
 func _draw_portal() -> void:
 	var c := Vector2(portal["home_pos"]) * TILE + Vector2(TILE, TILE) * 0.5
@@ -2979,6 +3090,22 @@ func _draw_ground_item(it: Dictionary) -> void:
 			draw_rect(Rect2(mid + Vector2(-2.4, -5.5), Vector2(4.8, 2)), Color(0.28, 0.18, 0.08))
 			draw_line(mid + Vector2(-6, -1), mid + Vector2(6, -1), Color(0.32, 0.20, 0.09), 1.0)
 			draw_line(mid + Vector2(0, -3.5), mid + Vector2(0, 6), Color(0.32, 0.20, 0.09), 1.0)
+		"potion":  # a healing draught: red liquid in a corked flask
+			draw_colored_polygon(PackedVector2Array([
+				mid + Vector2(-2, -7), mid + Vector2(2, -7), mid + Vector2(2, -2),
+				mid + Vector2(5.5, 5), mid + Vector2(-5.5, 5), mid + Vector2(-2, -2)]),
+				Color(0.80, 0.88, 0.94, 0.9))
+			draw_colored_polygon(PackedVector2Array([
+				mid + Vector2(3.2, 0), mid + Vector2(5.5, 5),
+				mid + Vector2(-5.5, 5), mid + Vector2(-3.2, 0)]),
+				Color(0.80, 0.20, 0.16))
+			draw_rect(Rect2(mid + Vector2(-2.4, -9), Vector2(4.8, 2.2)), Color(0.50, 0.36, 0.18))
+		"tpscroll":  # a portal scroll: pale roll with a glowing blue ribbon
+			draw_rect(Rect2(mid + Vector2(-7, -4), Vector2(14, 8)), Color(0.86, 0.84, 0.72))
+			draw_rect(Rect2(mid + Vector2(-7, -4), Vector2(2.2, 8)), Color(0.70, 0.67, 0.55))
+			draw_rect(Rect2(mid + Vector2(4.8, -4), Vector2(2.2, 8)), Color(0.70, 0.67, 0.55))
+			draw_rect(Rect2(mid + Vector2(-1.2, -5), Vector2(2.4, 10)), Color(0.35, 0.60, 1.0))
+			draw_circle(mid, 1.6, Color(0.75, 0.90, 1.0))
 		_:         # anything else: the classic gold diamond
 			draw_colored_polygon(PackedVector2Array([
 				mid + Vector2(0, -9), mid + Vector2(8, 0),
@@ -3020,6 +3147,13 @@ func _draw_vendor(v: Dictionary) -> void:
 			draw_circle(center + Vector2(0, 1.5), 5.5, Color(0.48, 0.32, 0.14))
 			draw_rect(Rect2(center + Vector2(-2.5, -6), Vector2(5, 3)), Color(0.36, 0.24, 0.10))
 			draw_circle(center + Vector2(0, 2), 2.2, Color(0.95, 0.82, 0.30))
+		"scroll":
+			draw_rect(Rect2(center + Vector2(-6, -4), Vector2(12, 8)), Color(0.90, 0.87, 0.75))
+			draw_rect(Rect2(center + Vector2(-6, -4), Vector2(2, 8)), Color(0.72, 0.68, 0.55))
+			draw_rect(Rect2(center + Vector2(4, -4), Vector2(2, 8)), Color(0.72, 0.68, 0.55))
+			for i in 2:
+				draw_line(center + Vector2(-3, -1.5 + i * 3), center + Vector2(3, -1.5 + i * 3),
+						Color(0.45, 0.42, 0.34), 0.9)
 		_:
 			_draw_glyph(center, "V", Color(0.15, 0.12, 0.02))
 	# name plate under the symbol
@@ -3029,6 +3163,14 @@ func _draw_vendor(v: Dictionary) -> void:
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0, 0, 0, 0.75))
 	draw_string(font, center + Vector2(-lw * 0.5, 23), label,
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.95, 0.92, 0.78))
+	# quest mark above the badge: "!" = quest to give, "?" = turn-in ready
+	if not quests.is_empty():
+		var gidx: int = v["set_idx"] + (VENDORS.size() if v.get("set", "town") == "west" else 0)
+		var q: Dictionary = quests[gidx % quests.size()]
+		if q["state"] == "hidden":
+			_draw_quest_mark(center + Vector2(0, -21), "!")
+		elif q["state"] == "active" and _quest_fulfilled(q):
+			_draw_quest_mark(center + Vector2(0, -21), "?")
 
 func _draw_mob(mob: Dictionary) -> void:
 	var t: Dictionary = MOB_TYPES[mob["type"]]

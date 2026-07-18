@@ -77,6 +77,13 @@ func _run(game: Node2D) -> void:
 		_check((st["explored"] as Array).size() == def["h"],
 				"%s has an exploration grid" % id)
 
+	# the ruins stairway sits inside its shrine
+	var rst: Dictionary = game._generate_map("ruins")
+	_check(rst["grid"][23][99] == "O", "the ruins stairway sits at the shrine's heart")
+	_check(rst["grid"][21][99] == "S" and rst["grid"][25][99] == "D",
+			"the shrine has stone walls and a south door")
+	_check(rst["stairs_down"] == Vector2i(99, 23), "the stairs_down marker matches")
+
 	# fog of war: the view around the spawn is explored, far corners not
 	game._load_map("wilds", "spawn")
 	game._refresh()
@@ -119,13 +126,13 @@ func _run(game: Node2D) -> void:
 	game._buyback_item(0)
 	_check(game.inventory.get(first, 0) == 1, "bought the %s back" % first)
 
-	# Pell's fetch quest: bring 3 bread, get 2 pies
-	game._add_item("bread", 3)
-	game._talk_to_vendor(7)   # first talk: quest activates
-	game._talk_to_vendor(7)   # second talk: fulfilled, hand it over
-	_check(game.quests[game.VENDORS.size() + 7]["state"] == "done", "Pell's bread quest completes")
-	_check(game.inventory.get("bread", 0) == 0, "the bread was handed over")
-	_check(game.inventory.get("pie", 0) == 2, "the pie reward arrived")
+	# Sable the scribe: portal scrolls for sale, wraith-ink to gather
+	game._talk_to_vendor(7)   # first talk: quest activates, shop opens
+	_check("tpscroll" in game.vendor_def(game.current_shop)["stock"], "Sable sells portal scrolls")
+	game.quests[game.VENDORS.size() + 7]["progress"] = 4
+	game._talk_to_vendor(7)   # wraiths dealt with: turn it in
+	_check(game.quests[game.VENDORS.size() + 7]["state"] == "done", "Sable's wraith quest completes")
+	_check(game.inventory.get("tpscroll", 0) >= 3, "the scroll reward arrived")
 
 	# the backpack groups items under category headers
 	game.inventory = {}
@@ -167,13 +174,28 @@ func _run(game: Node2D) -> void:
 	_check(game.map_name("town") == "Ruins of Grey Fortress", "the town is renamed in its ruin")
 	_check(game.portal_home() == "west", "portals now lead to Westmere")
 
-	# the survivors trade on in the Westmere refugee camp
+	# Dolm did not make it out: walking over his body delivers the quest
+	game.player_pos = game.DOLM_BODY + Vector2i(-1, 0)
+	game._try_player_move(Vector2i(1, 0))
+	_check(game.quests[3]["state"] == "done", "walking over Dolm's body delivers the parchment")
+	_check(game.inventory.get("parchment", 0) == 0, "the parchment leaves your pack")
+	_check(game.inventory.get("armor", 0) == 1, "Dolm's strongbox held the Leather Armor")
+
+	# the survivors trade on in the Westmere refugee camp - without Dolm
 	game._load_map("west", "spawn")
-	_check(game.vendors.size() == 12, "Westmere holds 8 locals and 4 refugees")
-	game._talk_to_vendor(11)  # Dolm, in exile: activates his quest
-	game._talk_to_vendor(11)  # and hands over the parchment
-	_check(game.quests[3]["state"] == "done", "Dolm receives the parchment in exile")
-	_check(game.inventory.get("armor", 0) == 1, "the Leather Armor reward arrived")
+	_check(game.vendors.size() == 11, "Westmere holds 8 locals and 3 refugees")
+	var refugees: Array = game.vendors.filter(func(v): return v.get("set", "") == "town")
+	_check(refugees.size() == 3, "Dolm is not among the refugees")
+
+	# the intro parchment: shown for title-screen runs, skippable forever
+	game.skip_intro = false
+	game._start(true)
+	_check(game.mode == game.Mode.INTRO, "a fresh run opens on the intro parchment")
+	game._close_intro()
+	_check(game.mode == game.Mode.PLAY, "any key dismisses the intro")
+	game.skip_intro = true
+	game._start(true)
+	_check(game.mode == game.Mode.PLAY, "the option skips the intro entirely")
 
 	if failures == 0:
 		print("smoke test: all checks passed")

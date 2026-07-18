@@ -19,13 +19,24 @@ page of the Covenant — the seal that bound the Grey Fortress and the
 dead who garrison it. The moment it leaves the vault, the seal
 breaks; the first time you set foot in town again you find it burned
 to the ground, every house a charred shell, and a scrawl on a
-scorched door: *"Gone west. Find us. — Dolm."*
+scorched door: *"Gone west. Find us. — Alda."*
 
-The survivors — all four vendors — have fled through the broken west
-gate to Westmere Village, where they trade on from a refugee camp by
-the temple green. Hand Dolm the parchment there and he reads what you
-both should have left buried... and looks north, at the boarded gate,
-where the road climbs to the Grey Fortress itself (the next region).
+Not everyone made it out. Dolm the trader — the man who sent you
+after the parchment — lies where his shop stood, shielding his
+strongbox to the last. Walking over his body (a gold "?" marks the
+spot when you carry the parchment) delivers the quest: the reward
+waits in the strongbox, and the note in his hand carries the truth —
+*"We broke it, and the price was mine. Beyond Westmere's boarded
+gate — end what we began."* Complete it, and you pile the stones of
+his cairn yourself.
+
+The survivors — Alda, Borin and Cyra — fled through the broken west
+gate to Westmere Village, where they trade on from a refugee camp of
+tents by the temple green. And north of Westmere, behind the boarded
+gate, the road climbs to the Grey Fortress itself (the next region).
+
+A new run opens on one page of parchment telling the story so far —
+any key turns it over, and an Options toggle skips it forever.
 
 ## How to run
 
@@ -80,7 +91,8 @@ Movement is keyboard-only; the mouse operates the UI.
 2. Northern Wilds: rats, goblins, wild boars
 3. Dark Forest: wolves and goblin archers, the densest trees
 4. Ancient Ruins: swarming with skeletons, plus goblins, archers and
-   trolls; a sunken stairway near the east side leads underground
+   trolls; near the east side a ruined shrine houses the sunken
+   stairway that leads underground
 5. Sunken Crypt: the first dungeon — a dark cave carved beneath the
    ruins, haunted by skeletons and hexing wraiths, with the Sunken
    Crown (+10 max HP) hidden in its farthest corner and a second
@@ -90,12 +102,14 @@ Movement is keyboard-only; the mouse operates the UI.
    far corner and the Mysterious Parchment in another
 7. Westmere Village (west of town, reached only after the fall):
    larger than town, eight vendors each with a real shop and a
-   quest of their own, plus the four town vendors trading on from
-   a refugee camp of tents by the temple green. Westmere's wares
-   fill the equipment slots the town leaves empty (shirts,
-   necklaces, gauntlets, a tabard), and Odo the fletcher sells
-   wands that add spell damage. The boarded-up north gate hides
-   the road to the Grey Fortress itself (a future region)
+   quest of their own — including Sable the scribe, who sells
+   Scrolls of Town Portal (Tobin runs the joint butcher-bakery
+   that made room for her) — plus the three surviving town vendors
+   trading on from a refugee camp of tents by the temple green.
+   Westmere's wares fill the equipment slots the town leaves empty
+   (shirts, necklaces, gauntlets, a tabard), and Odo the fletcher
+   sells wands that add spell damage. The boarded-up north gate
+   hides the road to the Grey Fortress itself (a future region)
 
 A winding road connects the south and north gates of every surface
 map, so you can never be walled in by the procedural generation.
@@ -113,7 +127,9 @@ its entrance tile.
 
 ## Systems
 
-- Coins: every kill drops some (amount depends on the mob)
+- Coins: every kill drops some (amount depends on the mob), and
+  rarely a mob leaves a Healing Potion (6%) or a Scroll of Town
+  Portal (3%) on the ground where it fell
 - XP and levels: +3 max HP per level, +1 damage every 2 levels
 - Magic: three spells for now — Magic Dart (3 mana, 2 damage,
   range 7), Bone Arrow (5 mana, 3 damage, range 9) and Fire Boulder
@@ -134,11 +150,12 @@ its entrance tile.
 - Inventory: grouped into categories — Weapons, Armour, Consumables
   and Quest Items — with headers in the character sheet, so potions
   never rub elbows with swords; shop sell lists use the same order
-- Town portal: Scrolls of Town Portal (sold by Cyra and Mira)
-  teleport you home instantly — Diablo style — and leave a swirling
-  portal there that returns you to the very tile you cast from,
-  then closes; one round trip per scroll, and "home" moves to
-  Westmere after the fall of the town
+- Town portal: Scrolls of Town Portal (sold by Cyra, Mira and
+  Sable the scribe, rewarded by Cyra's and Sable's quests, and
+  rarely dropped by mobs) teleport you home instantly — Diablo
+  style — and leave a swirling portal there that returns you to
+  the very tile you cast from, then closes; one round trip per
+  scroll, and "home" moves to Westmere after the fall of the town
 - Equipment: 20 WoW-style slots (head through bag); items give
   damage or max HP bonuses; a bag in the Bag slot raises backpack
   capacity from 20 to 28 stacks (no weight limits)
@@ -158,12 +175,18 @@ its entrance tile.
   synthesized rain loop with animated streaks, plus occasional
   distant lightning (thunder rumble and a brief screen flash)
 - Quests: every vendor gives one on first talk; return when done.
-  The town's four (kill 5 rats, kill 3 goblins, bring 10 coins,
-  fetch the parchment) are joined by Westmere's eight (wolves,
-  boars, trolls, skeletons, potions and bread to fetch, coins to
-  invest), twelve in all; the parchment quest drives the story —
-  finding it burns the town, and turning it in (to Dolm, in exile)
-  rewards Leather Armor (+4 max HP, drawn on the hero)
+  A gold "!" floats over vendors with a quest to give, and a gold
+  "?" when theirs is ready to turn in (the same "?" marks Dolm's
+  body when you carry the parchment). The town's four (kill 5
+  rats, kill 3 goblins, bring 10 coins, fetch the parchment) are
+  joined by Westmere's eight (wolves, boars, trolls, skeletons,
+  wraiths, potions to fetch, coins to invest), twelve in all; the
+  parchment quest drives the story — finding it burns the town,
+  and it is delivered over Dolm's body in his burned shop, which
+  yields his strongbox (60 coins, Leather Armor) and his last note
+- Quest journal (J): grouped by area — the town's quests under one
+  header, Westmere's under another — and only quests you have
+  actually been given appear; unmet givers stay hidden
 - Save / load: "Save Game" in the options menu writes
   user://save.json; "Continue" on the title screen restores it
   (the world regenerates deterministically, so only the dynamic
@@ -187,7 +210,8 @@ its entrance tile.
   places that have actually been on your screen are drawn, they
   stay revealed forever, and the fog is stored in the save file;
   the world overview lives on the world map screen (M)
-- Options menu (O or Esc): master volume, keybinds, fullscreen;
+- Options menu (O or Esc): master volume, keybinds, fullscreen,
+  and an "Intro story" toggle (show or skip the opening parchment);
   menu items and the sound slider also respond to mouse click/drag;
   settings persist to user://settings.cfg
 - Each wilderness map hides a loot outpost: a small stone keep

@@ -21,6 +21,8 @@ func _draw() -> void:
 	_draw_bar()
 	_draw_minimap()
 	match game.mode:
+		game.Mode.INTRO:
+			_draw_panel_intro()
 		game.Mode.INVENTORY:
 			_draw_panel_character()
 		game.Mode.JOURNAL:
@@ -165,6 +167,40 @@ func _draw_title_fortress(base: Vector2) -> void:
 	# gate: an arch in the curtain wall
 	draw_rect(Rect2(base + Vector2(-22, -52), Vector2(44, 52)), Color(0.05, 0.05, 0.08))
 	draw_circle(base + Vector2(0, -52), 22.0, Color(0.05, 0.05, 0.08))
+
+
+# ---------------- intro parchment ----------------
+# The story so far, on a single page of parchment. Any key or click
+# turns it over; the Options menu can skip it for future runs.
+func _draw_panel_intro() -> void:
+	var vs := get_viewport_rect().size
+	draw_rect(Rect2(0, 0, vs.x, vs.y), Color(0.02, 0.02, 0.04, 0.74))
+	var w := 660.0
+	var h := 480.0
+	var px := (vs.x - w) * 0.5
+	var py := (vs.y - BAR_H - h) * 0.5
+	draw_rect(Rect2(px - 5, py - 5, w + 10, h + 10), Color(0.32, 0.26, 0.16))
+	draw_rect(Rect2(px, py, w, h), Color(0.84, 0.77, 0.60))
+	draw_rect(Rect2(px + 6, py + 6, w - 12, h - 12), Color(0.88, 0.82, 0.66))
+	var ink := Color(0.24, 0.18, 0.10)
+	var title := "GREY FORTRESS"
+	var tw: float = font.get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, 30).x
+	draw_string(font, Vector2(px + (w - tw) * 0.5, py + 58), title,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 30, ink)
+	var paras := [
+		"For three hundred years the Grey Fortress has stood silent on its hill. No banner flies from its keep. No road climbs to its gate. The town below has long since learned not to look up.",
+		"You came for simpler things: coin, work, a warm hearth. Rats in the granary, goblins on the road - the small wars that keep a town alive.",
+		"But something stirs beneath the ruins to the north. In the deep places of the earth it waits - patient as parchment, quiet as wax - for a hand bold enough to break a seal.",
+	]
+	var y := py + 104.0
+	for para in paras:
+		draw_multiline_string(font, Vector2(px + 42, y), para,
+				HORIZONTAL_ALIGNMENT_LEFT, w - 84.0, 15, -1, ink)
+		y += font.get_multiline_string_size(para, HORIZONTAL_ALIGNMENT_LEFT, w - 84.0, 15).y + 26.0
+	var hint := "- press any key to begin -"
+	var hw: float = font.get_string_size(hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x
+	draw_string(font, Vector2(px + (w - hw) * 0.5, py + h - 26), hint,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.42, 0.34, 0.22))
 
 
 # ---------------- "Entering..." area banner ----------------
@@ -562,18 +598,27 @@ func _draw_targeting() -> void:
 
 
 # ---------------- quest journal ----------------
+# Quests grouped by area, showing only the ones you have actually
+# been given: unmet quest givers stay out of sight. Each area gets a
+# gold header; the box sizes itself to the widest line.
 func _draw_panel_journal() -> void:
-	# Build each line first, then size the box to the widest one so
-	# long quest names (e.g. the Mysterious Parchment) never overflow.
 	var lines := []
-	for q in game.quests:
-		var text := ""
-		var col := Color(0.85, 0.85, 0.88)
-		match q["state"]:
-			"hidden":
-				text = "%s: ??? (go talk to them)" % q["giver"]
-				col = Color(0.5, 0.5, 0.58)
-			"active":
+	var sections := [
+		{ "title": game.map_name("town"), "from": 0, "to": game.VENDORS.size() },
+		{ "title": "Westmere Village", "from": game.VENDORS.size(), "to": game.quests.size() },
+	]
+	for sec in sections:
+		var sec_lines := []
+		for i in range(sec["from"], sec["to"]):
+			var q: Dictionary = game.quests[i]
+			if q["state"] == "hidden":
+				continue
+			var text := ""
+			var col := Color(0.85, 0.85, 0.88)
+			if q["state"] == "done":
+				text = "%s: %s  [completed]" % [q["giver"], q["desc"]]
+				col = Color(0.45, 0.6, 0.45)
+			else:
 				match q["type"]:
 					"kill":
 						text = "%s: %s (%d/%d)" % [q["giver"], q["desc"], q["progress"], q["need"]]
@@ -581,23 +626,31 @@ func _draw_panel_journal() -> void:
 						text = "%s: %s (you have %d)" % [q["giver"], q["desc"], game.coins]
 					"item":
 						var have: int = game.inventory.get(q["target"], 0)
-						text = "%s: %s (%s)" % [q["giver"], q["desc"],
-								"found it! return to them" if have > 0 else "not found yet"]
+						var hint := "not found yet"
+						if have >= q["need"]:
+							hint = "found it! return to them"
+							if q["target"] == "parchment" and game.town_burned:
+								hint = "find what is left of Dolm in the burned town"
+						text = "%s: %s (%s)" % [q["giver"], q["desc"], hint]
 				if game._quest_fulfilled(q):
 					col = Color(0.55, 0.9, 0.55)
-			"done":
-				text = "%s: %s  [completed]" % [q["giver"], q["desc"]]
-				col = Color(0.45, 0.6, 0.45)
-		lines.append({ "text": text, "col": col })
+			sec_lines.append({ "text": text, "col": col, "indent": 16.0 })
+		if sec_lines.is_empty():
+			continue
+		lines.append({ "text": sec["title"], "col": Color(0.85, 0.72, 0.35), "indent": 0.0 })
+		lines.append_array(sec_lines)
+	if lines.is_empty():
+		lines.append({ "text": "No quests yet. Talk to the villagers.",
+				"col": Color(0.5, 0.5, 0.58), "indent": 0.0 })
 
 	var content_w := 0.0
 	for ln in lines:
-		content_w = max(content_w, font.get_string_size(ln["text"], HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x)
+		content_w = max(content_w, ln["indent"] + font.get_string_size(ln["text"], HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x)
 	var w: float = clamp(content_w + 32.0, 560.0, get_viewport_rect().size.x - 40.0)
 	var h: float = 90.0 + lines.size() * 26.0
 	var p := _panel(w, h, "Quest Journal")
 	for i in lines.size():
-		draw_string(font, Vector2(p.x + 16, p.y + 58 + i * 26), lines[i]["text"],
+		draw_string(font, Vector2(p.x + 16 + lines[i]["indent"], p.y + 58 + i * 26), lines[i]["text"],
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 14, lines[i]["col"])
 	draw_string(font, Vector2(p.x + 16, p.y + h - 16), "Press any key or click to close.",
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.5, 0.5, 0.58))
@@ -706,14 +759,17 @@ func _draw_game_over() -> void:
 func _draw_panel_options() -> void:
 	match game.options_screen:
 		"main":
-			var p := _panel(420.0, 250.0, "Options")
+			var p := _panel(420.0, 280.0, "Options")
 			for i in game.OPT_MAIN.size():
 				var yy: float = p.y + 62 + i * 30
 				if game.opt_index == i:
 					draw_rect(Rect2(p.x + 8, yy - 18, 404, 26), Color(0.22, 0.26, 0.36))
-				draw_string(font, Vector2(p.x + 20, yy), game.OPT_MAIN[i],
+				var label: String = game.OPT_MAIN[i]
+				if label == "Intro story":
+					label += ": Skipped" if game.skip_intro else ": Shown"
+				draw_string(font, Vector2(p.x + 20, yy), label,
 						HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(0.88, 0.88, 0.9))
-			draw_string(font, Vector2(p.x + 16, p.y + 234), "Up/Down + Enter, or click/tap. Esc or right click closes.",
+			draw_string(font, Vector2(p.x + 16, p.y + 264), "Up/Down + Enter, or click/tap. Esc or right click closes.",
 					HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.5, 0.5, 0.58))
 		"graphics":
 			var p := _panel(420.0, 150.0, "Options - Graphics")
