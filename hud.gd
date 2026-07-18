@@ -379,25 +379,18 @@ func _draw_panel_worldmap() -> void:
 			var def: Dictionary = game.MAP_DEFS[id]
 			if def.has(link) and not shown.has(def[link]):
 				shown[def[link]] = "mystery"
-	# the boarded gate north of Westmere hints at the future region
-	var extra := {}
-	if game.visited.has("west"):
-		extra["wip"] = layout["west"] + Vector2(0, -1)
-
 	# fit the abstract grid into the panel
 	var lo := Vector2(1e9, 1e9)
 	var hi := Vector2(-1e9, -1e9)
 	for id in shown:
 		lo = lo.min(layout[id])
 		hi = hi.max(layout[id])
-	for id in extra:
-		lo = lo.min(extra[id])
-		hi = hi.max(extra[id])
 	var span := (hi - lo).max(Vector2.ONE)
 	var cell := Vector2(min(200.0, (w - 220.0) / span.x), min(105.0, (h - 140.0) / span.y))
 	var origin := Vector2(p.x, p.y + 30.0) + Vector2(w, h - 30.0) * 0.5 \
 			- (lo + span * 0.5) * cell
-	var node_size := Vector2(158, 52)
+	# nodes shrink with the grid so a wide world never overlaps
+	var node_size := Vector2(clamp(cell.x - 10.0, 100.0, 158.0), 52)
 
 	# connections first, so nodes draw over them
 	for id in shown:
@@ -406,42 +399,40 @@ func _draw_panel_worldmap() -> void:
 			if def.has(link) and shown.has(def[link]):
 				draw_line(origin + layout[id] * cell, origin + layout[def[link]] * cell,
 						Color(0.40, 0.40, 0.48), 2.0)
-	if extra.has("wip"):
-		draw_line(origin + layout["west"] * cell, origin + extra["wip"] * cell,
-				Color(0.30, 0.30, 0.36), 2.0)
 
 	for id in shown:
 		var center: Vector2 = origin + layout[id] * cell
 		var r := Rect2(center - node_size * 0.5, node_size)
 		if shown[id] == "known":
+			var def: Dictionary = game.MAP_DEFS[id]
 			draw_rect(r, game.map_tint(id))
 			var cur: bool = id == game.current_map
 			draw_rect(r, Color(0.95, 0.82, 0.25) if cur else Color(0.55, 0.55, 0.62),
 					false, 2.0 if cur else 1.0)
 			var label: String = game.map_name(id)
+			var has_sub: bool = cur or def.has("level")
 			var lw: float = font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x
-			draw_string(font, center + Vector2(-lw * 0.5, -2 if cur else 5), label,
+			draw_string(font, center + Vector2(-lw * 0.5, -2 if has_sub else 5), label,
 					HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.95, 0.93, 0.85))
+			# second line: your position, or the map's suggested level
+			var sub := ""
 			if cur:
-				var you := "* you are here *"
-				var yw: float = font.get_string_size(you, HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x
-				draw_string(font, center + Vector2(-yw * 0.5, 15), you,
-						HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.95, 0.85, 0.45))
+				sub = "* you are here *"
+				if def.has("level"):
+					sub = "* here *  (suggested Lv %d)" % def["level"]
+			elif def.has("level"):
+				sub = "suggested Lv %d" % def["level"]
+			if sub != "":
+				var yw: float = font.get_string_size(sub, HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x
+				draw_string(font, center + Vector2(-yw * 0.5, 15), sub,
+						HORIZONTAL_ALIGNMENT_LEFT, -1, 10,
+						Color(0.95, 0.85, 0.45) if cur else Color(0.72, 0.72, 0.62))
 		else:
 			draw_rect(r, Color(0.10, 0.10, 0.14))
 			draw_rect(r, Color(0.30, 0.30, 0.36), false, 1.0)
 			var qw: float = font.get_string_size("???", HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x
 			draw_string(font, center + Vector2(-qw * 0.5, 5), "???",
 					HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.50, 0.50, 0.58))
-	if extra.has("wip"):
-		var center: Vector2 = origin + extra["wip"] * cell
-		var r := Rect2(center - node_size * 0.5, node_size)
-		draw_rect(r, Color(0.08, 0.08, 0.11))
-		draw_rect(r, Color(0.26, 0.26, 0.32), false, 1.0)
-		var wt := "work in progress"
-		var ww: float = font.get_string_size(wt, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x
-		draw_string(font, center + Vector2(-ww * 0.5, 5), wt,
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.48, 0.48, 0.55))
 
 	draw_string(font, Vector2(p.x + 16, p.y + h - 16), "Press any key or click to close.",
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.5, 0.5, 0.58))

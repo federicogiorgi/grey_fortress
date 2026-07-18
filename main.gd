@@ -1,32 +1,23 @@
 extends Node2D
 # =============================================================
-#  GREY FORTRESS - v10
+#  GREY FORTRESS - v11
 #
 #  New in this version:
-#   - The story: Dolm's quest now hunts the Mysterious Parchment,
-#     hidden in the deepest corner of Bone Hollow. Taking it
-#     breaks the Covenant that sealed the Grey Fortress - and
-#     when you next set foot in town, you find it burned to the
-#     ground. The four vendors flee to a refugee camp in
-#     Westmere, where Dolm reads the parchment and reveals what
-#     you have done (and where the road must lead next)
-#   - Town portal scrolls (Cyra and Mira sell them): using one
-#     teleports you home instantly and leaves a portal there
-#     that returns you to the very tile you cast it from -
-#     one round trip per scroll, like Diablo's
-#   - The backpack is grouped into categories: Weapons, Armour,
-#     Consumables and Quest Items, with headers in the character
-#     sheet (and the same order in shop sell lists)
-#   - Dolm dies in the fire: the parchment is delivered by walking
-#     over his body in his burned shop (gold "?" marks it); quest
-#     marks float over every giver ("!" waiting, "?" turn-in)
-#   - The journal groups quests by area and hides unmet givers;
-#     an intro parchment opens new runs (skippable, with an
-#     Options toggle to skip it forever)
-#   - Sable the scribe sells portal scrolls in Westmere (Tobin
-#     runs the merged butcher-bakery); mobs rarely drop potions
-#     and portal scrolls; the ruins stairway got its shrine
+#   - The Northern Reaches: eight procedurally generated wild
+#     maps between Westmere and the Grey Fortress, linked in a
+#     web rather than a line - up to four gates per map (east/
+#     west gates and crossroads are new machinery), with several
+#     routes north. The boarded gate opens when Dolm's last wish
+#     is honored
+#   - Six new monsters tuned for levels 6-10: dire wolf, orc,
+#     orc shaman (ranged), cave bear, gargoyle, dread knight
+#   - Suggested levels: every wilderness map advertises one on
+#     the world map and in its "Entering..." banner; each
+#     northern map hosts at least one Westmere quest target
 #
+#  v10: the story arc (parchment, the burning, Dolm's fate, quest
+#  marks, intro parchment, journal by area), town portals,
+#  backpack categories, Sable's scroll trade, rare mob drops.
 #  v9: Westmere's eight vendors got real shops and quests (12
 #  quests total), spell-damage wands, Bone Hollow + bone knights,
 #  minimap fog of war, per-item world loot icons.
@@ -65,14 +56,14 @@ const MAP_DEFS := {
 	},
 	"wilds": {
 		"name": "Northern Wilds", "south": "town", "north": "forest", "music": "wilds",
-		"w": 125, "h": 94, "tint": Color(0.25, 0.37, 0.22),
+		"w": 125, "h": 94, "tint": Color(0.25, 0.37, 0.22), "level": 1,
 		"tree_density": 0.040, "water_blobs": 3,
 		"mobs": { "r": 12, "g": 8, "b": 5 },
 		"outpost": { "x": 28, "y": 38, "item": "boots" },
 	},
 	"forest": {
 		"name": "Dark Forest", "south": "wilds", "north": "ruins", "music": "forest",
-		"w": 125, "h": 94, "tint": Color(0.14, 0.29, 0.15),
+		"w": 125, "h": 94, "tint": Color(0.14, 0.29, 0.15), "level": 2,
 		"tree_density": 0.115, "water_blobs": 2,
 		# darker ground, matching the deep green of its minimap tint
 		"palette": { "floor": Color(0.14, 0.22, 0.13), "floor_hi": Color(0.17, 0.26, 0.16) },
@@ -81,7 +72,7 @@ const MAP_DEFS := {
 	},
 	"ruins": {
 		"name": "Ancient Ruins", "south": "forest", "down": "crypt", "music": "ruins",
-		"w": 125, "h": 94, "tint": Color(0.33, 0.34, 0.39),
+		"w": 125, "h": 94, "tint": Color(0.33, 0.34, 0.39), "level": 3,
 		"tree_density": 0.024, "water_blobs": 1, "ruin_walls": true,
 		# grey, dusty ground: old stone showing through thin grass
 		"palette": { "floor": Color(0.25, 0.27, 0.24), "floor_hi": Color(0.29, 0.31, 0.28) },
@@ -89,19 +80,89 @@ const MAP_DEFS := {
 		"outpost": { "x": 28, "y": 58, "item": "legplates" },
 	},
 	# Reached through the west gate of town, which only opens once the
-	# town burns and the survivors flee here. Its own north gate is
-	# boarded up: the road to the Grey Fortress itself, a future region.
+	# town burns and the survivors flee here. Its north gate stays
+	# boarded until Dolm's last wish is honored; then the Northern
+	# Reaches open beyond it.
 	"west": {
-		"name": "Westmere Village", "east": "town", "music": "town",
+		"name": "Westmere Village", "east": "town", "north": "thorn", "music": "town",
 		"w": 50, "h": 36, "tint": Color(0.36, 0.42, 0.30),
 		"tree_density": 0.035, "water_blobs": 0, "mobs": {}, "no_fog": true,
+	},
+	# ---- The Northern Reaches: eight wild maps between Westmere and
+	# the Grey Fortress, linked in a web rather than a line - up to
+	# four gates each, with several routes north. "level" is the
+	# suggested character level (shown on the world map and in the
+	# area banner), and every map hosts at least one target of a
+	# Westmere quest.
+	"thorn": {
+		"name": "Thornwood", "south": "west", "west": "mire", "north": "vale",
+		"music": "forest", "level": 6,
+		"w": 120, "h": 90, "tint": Color(0.16, 0.30, 0.16),
+		"tree_density": 0.13, "water_blobs": 1,
+		"palette": { "floor": Color(0.15, 0.23, 0.13), "floor_hi": Color(0.18, 0.27, 0.16) },
+		"mobs": { "w": 10, "d": 8, "b": 6 },
+	},
+	"mire": {
+		"name": "Blackmire", "east": "thorn", "north": "barrens",
+		"music": "wilds", "level": 6,
+		"w": 120, "h": 88, "tint": Color(0.20, 0.26, 0.15),
+		"tree_density": 0.06, "water_blobs": 9,
+		"palette": { "floor": Color(0.17, 0.21, 0.12), "floor_hi": Color(0.20, 0.24, 0.14) },
+		"mobs": { "b": 9, "a": 7, "o": 6 },
+	},
+	"barrens": {
+		"name": "Ashen Barrens", "south": "mire", "east": "vale", "west": "pines",
+		"north": "graves", "music": "wilds", "level": 7,
+		"w": 125, "h": 92, "tint": Color(0.30, 0.28, 0.24),
+		"tree_density": 0.015, "water_blobs": 0,
+		"palette": { "floor": Color(0.24, 0.22, 0.19), "floor_hi": Color(0.28, 0.26, 0.22) },
+		"mobs": { "s": 11, "o": 8, "d": 6 },
+	},
+	"vale": {
+		"name": "Hollow Vale", "south": "thorn", "west": "barrens", "north": "approach",
+		"music": "forest", "level": 8,
+		"w": 120, "h": 90, "tint": Color(0.24, 0.33, 0.22),
+		"tree_density": 0.07, "water_blobs": 2,
+		"mobs": { "t": 6, "o": 9, "h": 6 },
+	},
+	"pines": {
+		"name": "Frostpine Reach", "east": "barrens", "north": "cliffs",
+		"music": "forest", "level": 7,
+		"w": 115, "h": 86, "tint": Color(0.44, 0.52, 0.50),
+		"tree_density": 0.10, "water_blobs": 1,
+		"palette": { "floor": Color(0.30, 0.35, 0.33), "floor_hi": Color(0.34, 0.39, 0.37) },
+		"mobs": { "w": 8, "d": 8, "u": 5 },
+	},
+	"cliffs": {
+		"name": "Greycliff Steps", "south": "pines", "east": "graves",
+		"music": "ruins", "level": 8,
+		"w": 115, "h": 86, "tint": Color(0.40, 0.40, 0.44),
+		"tree_density": 0.02, "water_blobs": 0, "ruin_walls": true,
+		"palette": { "floor": Color(0.26, 0.27, 0.26), "floor_hi": Color(0.30, 0.31, 0.30) },
+		"mobs": { "t": 5, "x": 6, "o": 8 },
+	},
+	"graves": {
+		"name": "Gravemarch", "west": "cliffs", "south": "barrens", "east": "approach",
+		"music": "ruins", "level": 9,
+		"w": 120, "h": 90, "tint": Color(0.21, 0.23, 0.21),
+		"tree_density": 0.03, "water_blobs": 0, "ruin_walls": true,
+		"palette": { "floor": Color(0.17, 0.19, 0.16), "floor_hi": Color(0.20, 0.22, 0.19) },
+		"mobs": { "s": 12, "y": 8, "k": 6 },
+	},
+	"approach": {
+		"name": "Fortress Approach", "west": "graves", "south": "vale",
+		"music": "ruins", "level": 10,
+		"w": 120, "h": 90, "tint": Color(0.30, 0.28, 0.34),
+		"tree_density": 0.015, "water_blobs": 0, "ruin_walls": true,
+		"palette": { "floor": Color(0.22, 0.21, 0.23), "floor_hi": Color(0.26, 0.25, 0.27) },
+		"mobs": { "k": 8, "y": 8, "x": 6, "v": 4 },
 	},
 	# The first dungeon level: a cave carved under the Ancient Ruins,
 	# reached by the sunken stairway ("O" tile) near its east side.
 	# "loot" is the unique item hidden in the cave's farthest corner.
 	"crypt": {
 		"name": "Sunken Crypt", "up": "ruins", "down": "crypt2", "music": "ruins",
-		"w": 60, "h": 44, "tint": Color(0.18, 0.15, 0.22),
+		"w": 60, "h": 44, "tint": Color(0.18, 0.15, 0.22), "level": 4,
 		"tree_density": 0.0, "water_blobs": 0, "cave": true, "loot": "crown",
 		"palette": { "floor": Color(0.16, 0.14, 0.19), "floor_hi": Color(0.20, 0.17, 0.23),
 				"wall": Color(0.10, 0.09, 0.13), "wall_hi": Color(0.15, 0.13, 0.18) },
@@ -114,7 +175,7 @@ const MAP_DEFS := {
 	# entrance and the treasure).
 	"crypt2": {
 		"name": "Bone Hollow", "up": "crypt", "music": "ruins",
-		"w": 70, "h": 52, "tint": Color(0.24, 0.15, 0.13),
+		"w": 70, "h": 52, "tint": Color(0.24, 0.15, 0.13), "level": 5,
 		"tree_density": 0.0, "water_blobs": 0, "cave": true, "loot": "runeblade",
 		"quest_loot": "parchment",
 		"palette": { "floor": Color(0.19, 0.13, 0.12), "floor_hi": Color(0.23, 0.16, 0.14),
@@ -161,6 +222,20 @@ const MOB_TYPES := {
 			"ranged": { "dmg": 2, "range": 5, "kind": "dart", "verb": "hexes" } },
 	"k": { "name": "bone knight", "hp": 12, "dmg": 3, "sight": 8, "xp": 30,
 			"coins": [12, 20], "color": Color(0.52, 0.52, 0.58) },
+	# ---- Northern Reaches mobs, tuned for levels 6-10 ----
+	"d": { "name": "dire wolf",  "hp": 8,  "dmg": 3, "sight": 11, "xp": 22,
+			"coins": [6, 10],  "color": Color(0.30, 0.32, 0.38) },
+	"o": { "name": "orc",        "hp": 9,  "dmg": 3, "sight": 9,  "xp": 26,
+			"coins": [8, 14],  "color": Color(0.30, 0.45, 0.24) },
+	"h": { "name": "orc shaman", "hp": 7,  "dmg": 2, "sight": 10, "xp": 30,
+			"coins": [9, 16],  "color": Color(0.38, 0.52, 0.30),
+			"ranged": { "dmg": 3, "range": 6, "kind": "dart", "verb": "hexes" } },
+	"u": { "name": "cave bear",  "hp": 14, "dmg": 4, "sight": 6,  "xp": 36,
+			"coins": [10, 20], "color": Color(0.35, 0.24, 0.15) },
+	"x": { "name": "gargoyle",   "hp": 12, "dmg": 4, "sight": 7,  "xp": 34,
+			"coins": [10, 18], "color": Color(0.48, 0.48, 0.55) },
+	"v": { "name": "dread knight", "hp": 18, "dmg": 5, "sight": 9, "xp": 60,
+			"coins": [20, 35], "color": Color(0.32, 0.28, 0.38) },
 }
 
 # Vendor stock comes in two tiers per item type: the second tier is
@@ -809,6 +884,8 @@ func _load_map(id: String, arrive: String) -> void:
 	if not visited.has(id):
 		visited[id] = true
 		banner_text = "Entering... %s" % map_name(id)
+		if MAP_DEFS[id].has("level"):
+			banner_text += "   (suggested Lv %d)" % MAP_DEFS[id]["level"]
 		banner_timer = 3.2
 	if burn_now:
 		banner_text = "Grey Fortress Town... lies in ashes"
@@ -868,17 +945,27 @@ func _generate_map(id: String) -> Dictionary:
 				var py := ry + (0 if horizontal else j)
 				g[py][px] = "S"
 
-	# 5. Winding road between the gates (wilderness maps).
+	# 5. Winding road between the gates (wilderness maps), plus a
+	# second east-west road for maps with side gates; the two are
+	# guaranteed to cross, so every gate connects.
 	if id != "town":
 		for y in range(1, h - 1):
 			var cx: int = gx + int(round(3.0 * sin(y * 0.11) + 2.0 * sin(y * 0.031)))
 			for x in range(cx - 1, cx + 3):
+				g[y][x] = "."
+	if id != "town" and id != "west" and (def.has("east") or def.has("west")):
+		var road_gy: int = h / 2
+		for x in range(1, w - 1):
+			var cy: int = road_gy + int(round(3.0 * sin(x * 0.09) + 2.0 * sin(x * 0.027)))
+			for y in range(cy - 1, cy + 3):
 				g[y][x] = "."
 
 	var vs := []
 	var altars := []
 	var items := []
 	var spawn := Vector2i(gx, h - 3)
+	var north_gate := Vector2i(-1, -1)
+	var south_gate := Vector2i(-1, -1)
 	var west_gate := Vector2i(-1, -1)
 	var east_gate := Vector2i(-1, -1)
 
@@ -935,10 +1022,16 @@ func _generate_map(id: String) -> Dictionary:
 		g[ey][w - 1] = ">"
 		g[ey + 1][w - 1] = ">"
 		east_gate = Vector2i(w - 1, ey)
-		# boarded north gate, with a road that ends at it
+		# north gate: boarded until Dolm's last wish opens the road
+		# to the Northern Reaches, with a road leading up to it
 		_clear_area(g, gx - 2, 1, 6, 3)
-		g[0][gx] = "B"
-		g[0][gx + 1] = "B"
+		if fortress_road_open():
+			g[0][gx] = "^"
+			g[0][gx + 1] = "^"
+			north_gate = Vector2i(gx, 0)
+		else:
+			g[0][gx] = "B"
+			g[0][gx + 1] = "B"
 		for y in range(1, 5):
 			for x in range(gx - 1, gx + 3):
 				g[y][x] = "."
@@ -994,10 +1087,11 @@ func _generate_map(id: String) -> Dictionary:
 		g[23][99] = "O"
 		stairs_down = Vector2i(99, 23)
 
-	# 8. Gates, with a small clearing around each.
-	var north_gate := Vector2i(-1, -1)
-	var south_gate := Vector2i(-1, -1)
-	if def.has("north"):
+	# 8. Gates, with a small clearing around each. North/south sit on
+	# the gx columns, east/west on the gy rows. Westmere's north gate
+	# (boarded or open) and the villages' special gates were already
+	# placed above, so anything pre-set is skipped here.
+	if def.has("north") and north_gate.x < 0 and id != "west":
 		_clear_area(g, gx - 2, 1, 6, 3)
 		g[0][gx] = "^"
 		g[0][gx + 1] = "^"
@@ -1007,6 +1101,17 @@ func _generate_map(id: String) -> Dictionary:
 		g[h - 1][gx] = "v"
 		g[h - 1][gx + 1] = "v"
 		south_gate = Vector2i(gx, h - 1)
+	var gy: int = h / 2
+	if def.has("east") and east_gate.x < 0:
+		_clear_area(g, w - 4, gy - 2, 3, 6)
+		g[gy][w - 1] = ">"
+		g[gy + 1][w - 1] = ">"
+		east_gate = Vector2i(w - 1, gy)
+	if def.has("west") and west_gate.x < 0 and id != "town":
+		_clear_area(g, 1, gy - 2, 3, 6)
+		g[gy][0] = "<"
+		g[gy + 1][0] = "<"
+		west_gate = Vector2i(0, gy)
 
 	# 9. Mobs, kept away from the south entrance.
 	var ms := _spawn_mobs(g, rng, def["mobs"], w, h,
@@ -1813,7 +1918,7 @@ func _try_player_move(dir: Vector2i) -> void:
 	elif tile == "A":
 		_pray()
 	elif tile == "B":
-		_log("The gate is boarded shut. Beyond lies unexplored land. (work in progress)")
+		_log("The gate is boarded shut. Whatever Dolm began, it is not yet finished.")
 		_refresh()
 		return
 	elif _is_walkable(target):
@@ -1991,7 +2096,28 @@ func _complete_quest(q: Dictionary) -> void:
 	_sfx("quest")
 	_log("Quest complete: %s! Reward: %s." % [q["desc"], ", ".join(reward_bits)])
 	_gain_xp(q["reward_xp"])
+	if q.get("target", "") == "parchment":
+		_open_fortress_road()
 	_check_victory()
+
+# The road to the Northern Reaches (and, one day, the Fortress):
+# Westmere's boarded north gate opens once Dolm's quest is done.
+func fortress_road_open() -> bool:
+	return not quests.is_empty() and quests[3]["state"] == "done"
+
+# If Westmere is already generated, swap its boards for a real gate.
+# (When it generates later, fortress_road_open() handles it.)
+func _open_fortress_road() -> void:
+	if not map_state.has("west"):
+		return
+	var st: Dictionary = map_state["west"]
+	if st["north_gate"].x >= 0:
+		return
+	var g: Array = st["grid"]
+	var road_gx: int = g[0].size() / 2
+	g[0][road_gx] = "^"
+	g[0][road_gx + 1] = "^"
+	st["north_gate"] = Vector2i(road_gx, 0)
 
 # Dolm did not make it out of the fire. His body lies where his shop
 # stood; walking over it delivers the parchment - the reward waits in
@@ -2010,7 +2136,7 @@ func _visit_dolm_body() -> void:
 		_complete_quest(q)
 		_log("In his hand, a note: 'It is a page of the Covenant that sealed the Fortress.'")
 		_log("'We broke it, and the price was mine. Beyond Westmere's boarded gate - end what we began.'")
-		_log("You pile stones over Dolm the trader. The ashes keep their silence.")
+		_log("You pile stones over Dolm the trader. The road north through Westmere is open.")
 	else:
 		_log("Dolm the trader lies among the ashes. Whatever he sought, it cost him everything.")
 
@@ -3274,6 +3400,61 @@ func _draw_mob_icon(c: Vector2, type: String, base: Color) -> void:
 				draw_colored_polygon(PackedVector2Array([
 					c + Vector2(-6 + i * 5, 3), c + Vector2(-3.5 + i * 5, 3),
 					c + Vector2(-4.75 + i * 5, 8.5)]), base.lightened(0.1))
+		"d":  # dire wolf: bigger ears than its cousin, ember eyes, bared fangs
+			draw_colored_polygon(PackedVector2Array([
+				c + Vector2(-7, -4), c + Vector2(-10, -13), c + Vector2(-2, -7)]), base.darkened(0.25))
+			draw_colored_polygon(PackedVector2Array([
+				c + Vector2(7, -4), c + Vector2(10, -13), c + Vector2(2, -7)]), base.darkened(0.25))
+			draw_circle(c + Vector2(-3.5, -2), 1.5, Color(0.95, 0.35, 0.15))
+			draw_circle(c + Vector2(3.5, -2), 1.5, Color(0.95, 0.35, 0.15))
+			draw_colored_polygon(PackedVector2Array([
+				c + Vector2(-3.5, 1), c + Vector2(3.5, 1), c + Vector2(0, 8.5)]), base.darkened(0.35))
+			draw_line(c + Vector2(-2.2, 3.4), c + Vector2(-1.6, 5.8), Color(0.95, 0.93, 0.85), 1.2)
+			draw_line(c + Vector2(2.2, 3.4), c + Vector2(1.6, 5.8), Color(0.95, 0.93, 0.85), 1.2)
+			draw_circle(c + Vector2(0, 7.2), 1.3, dark)
+		"o":  # orc: heavy underjaw, upward tusks, a warrior's topknot
+			draw_rect(Rect2(c + Vector2(-2, -12), Vector2(4, 4.5)), Color(0.15, 0.10, 0.08))
+			draw_circle(c + Vector2(-3.5, -2.5), 1.4, Color(0.90, 0.75, 0.20))
+			draw_circle(c + Vector2(3.5, -2.5), 1.4, Color(0.90, 0.75, 0.20))
+			draw_rect(Rect2(c + Vector2(-5, 2.5), Vector2(10, 4)), base.darkened(0.3))
+			draw_line(c + Vector2(-3.5, 3), c + Vector2(-4.5, -1), Color(0.95, 0.92, 0.82), 1.8)
+			draw_line(c + Vector2(3.5, 3), c + Vector2(4.5, -1), Color(0.95, 0.92, 0.82), 1.8)
+		"h":  # orc shaman: orc face beneath a bone circlet and feathers
+			draw_rect(Rect2(c + Vector2(-6.5, -8), Vector2(13, 3)), Color(0.92, 0.90, 0.80))
+			for i in 3:
+				draw_line(c + Vector2(-4 + i * 4, -8), c + Vector2(-4 + i * 4, -12.5),
+						Color(0.92, 0.90, 0.80), 1.6)
+			draw_circle(c + Vector2(-3.5, -2), 1.4, Color(0.55, 0.95, 0.65))
+			draw_circle(c + Vector2(3.5, -2), 1.4, Color(0.55, 0.95, 0.65))
+			draw_rect(Rect2(c + Vector2(-4.5, 3), Vector2(9, 3.4)), base.darkened(0.3))
+			draw_line(c + Vector2(-2.8, 3.4), c + Vector2(-3.6, 0.5), Color(0.95, 0.92, 0.82), 1.5)
+			draw_line(c + Vector2(2.8, 3.4), c + Vector2(3.6, 0.5), Color(0.95, 0.92, 0.82), 1.5)
+		"u":  # cave bear: round ears, small dark eyes, broad pale snout
+			draw_circle(c + Vector2(-6, -7), 3.4, base.darkened(0.2))
+			draw_circle(c + Vector2(6, -7), 3.4, base.darkened(0.2))
+			draw_circle(c + Vector2(-3.5, -2.5), 1.2, dark)
+			draw_circle(c + Vector2(3.5, -2.5), 1.2, dark)
+			draw_circle(c + Vector2(0, 3.5), 4.6, base.lightened(0.25))
+			draw_circle(c + Vector2(0, 2), 1.7, dark)
+			draw_line(c + Vector2(0, 3.5), c + Vector2(0, 6), dark, 1.0)
+		"x":  # gargoyle: horned stone face, blank glowing eyes, an old crack
+			draw_colored_polygon(PackedVector2Array([
+				c + Vector2(-6, -6), c + Vector2(-9, -12), c + Vector2(-3, -8)]), base.darkened(0.2))
+			draw_colored_polygon(PackedVector2Array([
+				c + Vector2(6, -6), c + Vector2(9, -12), c + Vector2(3, -8)]), base.darkened(0.2))
+			draw_circle(c + Vector2(-3.2, -2), 1.7, Color(0.95, 0.95, 0.85))
+			draw_circle(c + Vector2(3.2, -2), 1.7, Color(0.95, 0.95, 0.85))
+			draw_line(c + Vector2(1, -9), c + Vector2(3.5, 6), base.darkened(0.35), 1.2)
+			draw_line(c + Vector2(-3.5, 4.5), c + Vector2(3.5, 4.5), dark, 1.4)
+		"v":  # dread knight: darker helm than the bone knight's, red plume
+			draw_circle(c + Vector2(0, 0.5), 6.5, Color(0.30, 0.28, 0.36))
+			draw_rect(Rect2(c + Vector2(-7, -8.5), Vector2(14, 6)), Color(0.16, 0.15, 0.20))
+			draw_rect(Rect2(c + Vector2(-8, -4), Vector2(2.6, 7)), Color(0.16, 0.15, 0.20))
+			draw_rect(Rect2(c + Vector2(5.4, -4), Vector2(2.6, 7)), Color(0.16, 0.15, 0.20))
+			draw_rect(Rect2(c + Vector2(-1.4, -13.5), Vector2(2.8, 5.5)), Color(0.75, 0.16, 0.12))
+			draw_circle(c + Vector2(-2.7, -0.5), 1.6, Color(0.95, 0.30, 0.10))
+			draw_circle(c + Vector2(2.7, -0.5), 1.6, Color(0.95, 0.30, 0.10))
+			draw_line(c + Vector2(-3, 4.2), c + Vector2(3, 4.2), dark, 1.5)
 
 func _draw_player() -> void:
 	var center := Vector2(player_pos) * TILE + Vector2(TILE, TILE) * 0.5

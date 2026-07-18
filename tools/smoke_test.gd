@@ -48,14 +48,23 @@ func _run(game: Node2D) -> void:
 		game.current_shop = i
 		_check(game.shop_entries().size() > 0, "%s's shop panel builds" % vd["name"])
 
+	# every link goes somewhere real AND links back the opposite way
+	var opposite := { "north": "south", "south": "north", "east": "west",
+			"west": "east", "up": "down", "down": "up" }
+	for id in game.MAP_DEFS:
+		for dir in opposite:
+			if game.MAP_DEFS[id].has(dir):
+				var other: String = game.MAP_DEFS[id][dir]
+				_check(game.MAP_DEFS.has(other) \
+						and game.MAP_DEFS[other].get(opposite[dir], "") == id,
+						"%s.%s links back from %s" % [id, dir, other])
+
 	for id in game.MAP_DEFS:
 		var st: Dictionary = game._generate_map(id)
 		_check(not st["grid"].is_empty(), "%s generates" % id)
 		var def: Dictionary = game.MAP_DEFS[id]
-		for link in ["north", "south", "east", "west", "down", "up"]:
-			if def.has(link):
-				_check(game.MAP_DEFS.has(def[link]),
-						"%s's %s link goes somewhere real" % [id, link])
+		for mtype in def.get("mobs", {}):
+			_check(game.MOB_TYPES.has(mtype), "%s spawns a real mob (%s)" % [id, mtype])
 		if def.has("cave"):
 			var ids := []
 			for entry in st["items"]:
@@ -76,6 +85,28 @@ func _run(game: Node2D) -> void:
 						"%s mob stands on floor" % id)
 		_check((st["explored"] as Array).size() == def["h"],
 				"%s has an exploration grid" % id)
+
+	# the Northern Reaches: eight maps, every gate carved, a suggested
+	# level each, and at least one Westmere quest target per map
+	var west_targets := []
+	for i in range(game.VENDORS.size(), game.vendor_total()):
+		var wq: Dictionary = game.vendor_def(i)["quest"]
+		if wq["type"] == "kill":
+			west_targets.append(wq["target"])
+	var gate_keys := { "north": "north_gate", "south": "south_gate",
+			"east": "east_gate", "west": "west_gate" }
+	for id in ["thorn", "mire", "barrens", "vale", "pines", "cliffs", "graves", "approach"]:
+		var st: Dictionary = game._generate_map(id)
+		var def: Dictionary = game.MAP_DEFS[id]
+		for dir in gate_keys:
+			if def.has(dir):
+				_check(st[gate_keys[dir]].x >= 0, "%s carves its %s gate" % [id, dir])
+		_check(def.has("level"), "%s suggests a level" % id)
+		var hosts := false
+		for mtype in def["mobs"]:
+			if mtype in west_targets:
+				hosts = true
+		_check(hosts, "%s hosts a Westmere quest target" % id)
 
 	# the ruins stairway sits inside its shrine
 	var rst: Dictionary = game._generate_map("ruins")
@@ -186,6 +217,13 @@ func _run(game: Node2D) -> void:
 	_check(game.vendors.size() == 11, "Westmere holds 8 locals and 3 refugees")
 	var refugees: Array = game.vendors.filter(func(v): return v.get("set", "") == "town")
 	_check(refugees.size() == 3, "Dolm is not among the refugees")
+
+	# Dolm's last wish opens the road north into the Reaches
+	_check(game.fortress_road_open(), "Dolm's quest opens the fortress road")
+	_check(game.map_state["west"]["north_gate"].x >= 0, "Westmere's north gate stands open")
+	game._load_map("thorn", "south_gate")
+	_check(game.current_map == "thorn", "the road north leads into Thornwood")
+	_check(game.mobs.size() > 0, "Thornwood is populated")
 
 	# the intro parchment: shown for title-screen runs, skippable forever
 	game.skip_intro = false

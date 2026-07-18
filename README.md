@@ -32,8 +32,11 @@ his cairn yourself.
 
 The survivors — Alda, Borin and Cyra — fled through the broken west
 gate to Westmere Village, where they trade on from a refugee camp of
-tents by the temple green. And north of Westmere, behind the boarded
-gate, the road climbs to the Grey Fortress itself (the next region).
+tents by the temple green. Laying Dolm to rest opens the boarded
+north gate, and beyond it the Northern Reaches: eight wild maps of
+orcs, gargoyles and worse, climbing level by level to the Fortress
+Approach — the doorstep of the Grey Fortress itself (the next
+region).
 
 A new run opens on one page of parchment telling the story so far —
 any key turns it over, and an Options toggle skips it forever.
@@ -108,17 +111,39 @@ Movement is keyboard-only; the mouse operates the UI.
    trading on from a refugee camp of tents by the temple green.
    Westmere's wares fill the equipment slots the town leaves empty
    (shirts, necklaces, gauntlets, a tabard), and Odo the fletcher
-   sells wands that add spell damage. The boarded-up north gate
-   hides the road to the Grey Fortress itself (a future region)
+   sells wands that add spell damage. Its boarded north gate opens
+   once Dolm's last wish is honored, onto...
+8. The Northern Reaches — eight procedurally generated wild maps
+   between Westmere and the Grey Fortress, linked in a web rather
+   than a line (up to four gates per map, so there are several
+   routes north). Every map shows a suggested level and hosts at
+   least one Westmere quest target:
+   - Thornwood (Lv 6): bramble forest of wolves, dire wolves, boars
+   - Blackmire (Lv 6): drowned bogland; boars, goblin archers, orcs
+   - Ashen Barrens (Lv 7): dead ash flats; skeletons, orcs, dire
+     wolves
+   - Frostpine Reach (Lv 7): pale frozen pines; wolves, dire
+     wolves, cave bears
+   - Hollow Vale (Lv 8): deep green valley; trolls, orcs, orc
+     shamans (ranged hexes)
+   - Greycliff Steps (Lv 8): broken rock shelves; trolls,
+     gargoyles, orcs
+   - Gravemarch (Lv 9): tomb-strewn marches; skeletons, wraiths,
+     bone knights
+   - Fortress Approach (Lv 10): the final doorstep — bone knights,
+     wraiths, gargoyles and dread knights guard the road's end
 
 A winding road connects the south and north gates of every surface
 map, so you can never be walled in by the procedural generation.
 Every mob is drawn with its own face icon (rat whiskers, goblin
 ears, boar tusks, wolf muzzle, skull, troll underbite, archer
-headband, wraith glow, the bone knight's helm), and every piece of
-world loot with its own icon too (the parchment's wax seal, the
-crown's prongs, a pair of boots, the glowing runeblade...), each in
-a soft gold halo so it catches the eye.
+headband, wraith glow, the bone knight's helm, the orc's tusks and
+topknot, the shaman's bone circlet, the dire wolf's ember eyes, the
+gargoyle's stone horns, the cave bear's pale snout, the dread
+knight's red plume), and every piece of world loot with its own
+icon too (the parchment's wax seal, the crown's prongs, a pair of
+boots, the glowing runeblade...), each in a soft gold halo so it
+catches the eye.
 
 Maps connect through data-driven links (gates and stairs), and both
 the world map screen and all transitions derive from them — adding
@@ -131,6 +156,10 @@ its entrance tile.
   rarely a mob leaves a Healing Potion (6%) or a Scroll of Town
   Portal (3%) on the ground where it fell
 - XP and levels: +3 max HP per level, +1 damage every 2 levels
+- Suggested levels: every wilderness map and dungeon advertises a
+  suggested character level on the world map (M) and in its
+  "Entering..." banner, from the Northern Wilds (Lv 1) to the
+  Fortress Approach (Lv 10); mobs are tuned to match
 - Magic: three spells for now — Magic Dart (3 mana, 2 damage,
   range 7), Bone Arrow (5 mana, 3 damage, range 9) and Fire Boulder
   (7 mana, 5 damage, range 5); projectiles animate to the target,
@@ -246,8 +275,10 @@ Public domain (CC0).
 ## Next steps
 
 - A third dungeon level below Bone Hollow, with a boss guarding it
-- The Grey Fortress itself, beyond Westmere's boarded north gate —
+- The Grey Fortress itself, at the end of the Fortress Approach —
   the place the parchment's Covenant no longer seals
+- Quests and points of interest inside the Northern Reaches
+  (outposts, a hermit, things worth finding off the roads)
 - Spells that interact with the environment (burning trees,
   freezing water)
 - Fog of war for the main view too (the minimap already has it)
