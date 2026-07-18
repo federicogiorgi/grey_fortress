@@ -999,6 +999,17 @@ func _generate_map(id: String) -> Dictionary:
 			_place_house(g, 9, 14, vs)   # Cyra
 			_place_house(g, 28, 14, vs)  # Dolm
 			_place_temple(g, 18, 21, altars)
+		# The sealed east gate: beyond it, the broken road that once
+		# climbed to the Grey Fortress itself. Stone outlasts fire,
+		# so it stands in both towns, flanked by old gateposts.
+		var fgy: int = h / 2
+		for y in range(fgy - 1, fgy + 3):
+			for x in range(36, w - 1):
+				g[y][x] = "."
+		g[fgy][w - 1] = "G"
+		g[fgy + 1][w - 1] = "G"
+		g[fgy - 1][w - 2] = "S"
+		g[fgy + 2][w - 2] = "S"
 		spawn = Vector2i(gx, 12)
 		# Short road from the plaza up to the north gate.
 		for y in range(1, 7):
@@ -1921,6 +1932,15 @@ func _try_player_move(dir: Vector2i) -> void:
 		_log("The gate is boarded shut. Whatever Dolm began, it is not yet finished.")
 		_refresh()
 		return
+	elif tile == "G":
+		if town_burned:
+			_log("The fortress gate stands unburned amid the ashes. Stone remembers its orders.")
+			_log("Beyond it, the road hangs in pieces over empty air. Nothing crosses that lacks wings or sorcery.")
+		else:
+			_log("The old east gate, sealed for a hundred years. Behind it climbed the road to the Grey Fortress -")
+			_log("broken now: shattered spans over empty air, crossed by nothing that cannot fly or work magic.")
+		_refresh()
+		return
 	elif _is_walkable(target):
 		player_pos = target
 		_pickup_items()
@@ -2136,7 +2156,7 @@ func _visit_dolm_body() -> void:
 		_complete_quest(q)
 		_log("In his hand, a note: 'It is a page of the Covenant that sealed the Fortress.'")
 		_log("'We broke it, and the price was mine. Beyond Westmere's boarded gate - end what we began.'")
-		_log("You pile stones over Dolm the trader. The road north through Westmere is open.")
+		_log("You pile stones over Dolm the trader. The road west through Westmere is open.")
 	else:
 		_log("Dolm the trader lies among the ashes. Whatever he sought, it cost him everything.")
 
@@ -2924,8 +2944,8 @@ func _is_walkable(p: Vector2i) -> bool:
 	return grid[p.y][p.x] in [".", "D", "^", "v", "<", ">", "O", "U"]
 
 # Tiles that stop a projectile's flight (trees, all kinds of walls,
-# rubble, burnt trunks, tents).
-const BLOCKS_FLIGHT := ["#", "T", "H", "S", "B", "R", "F", "E"]
+# rubble, burnt trunks, tents, the sealed fortress gate).
+const BLOCKS_FLIGHT := ["#", "T", "H", "S", "B", "R", "F", "E", "G"]
 
 # First blocking tile strictly between `from` and `to` (Bresenham),
 # or Vector2i(-1, -1) if the line is clear. The endpoints themselves
@@ -3081,6 +3101,19 @@ func _draw_tile(x: int, y: int) -> void:
 			draw_line(pos + Vector2(4, 6), pos + Vector2(TILE - 4, TILE - 6), Color(0.48, 0.36, 0.18), 3.0)
 			draw_line(pos + Vector2(4, TILE - 6), pos + Vector2(TILE - 4, 6), Color(0.48, 0.36, 0.18), 3.0)
 			draw_rect(Rect2(pos + Vector2(3, 13), Vector2(TILE - 6, 5)), Color(0.55, 0.42, 0.22))
+		"G":
+			# the sealed fortress gate: an aged stone arch, barred shut,
+			# moss creeping up it; the broken fortress road lies beyond
+			draw_rect(r, Color(0.30, 0.30, 0.36))
+			draw_rect(inner, Color(0.38, 0.38, 0.45))
+			draw_rect(Rect2(pos + Vector2(6, 12), Vector2(20, 18)), Color(0.10, 0.10, 0.14))
+			draw_circle(pos + Vector2(16, 13), 10.0, Color(0.10, 0.10, 0.14))
+			for i in 4:
+				draw_line(pos + Vector2(8.5 + i * 5.0, 6), pos + Vector2(8.5 + i * 5.0, 30),
+						Color(0.24, 0.24, 0.30), 2.0)
+			draw_line(pos + Vector2(6, 19), pos + Vector2(26, 19), Color(0.24, 0.24, 0.30), 2.0)
+			draw_circle(pos + Vector2(8, 27), 2.0, Color(0.25, 0.40, 0.22))
+			draw_circle(pos + Vector2(25, 29), 1.6, Color(0.25, 0.40, 0.22))
 		"R":
 			# charred rubble: broken black walls, embers still winking
 			draw_rect(inner, Color(0.11, 0.10, 0.10))

@@ -8,8 +8,13 @@ export was removed).
 
 ## The story (spoilers)
 
-Grey Fortress Town sits in the shadow of an abandoned fortress no one
-talks about. Its four vendors keep you busy — until Dolm the trader
+Grey Fortress Town sits in the shadow of the fortress it is named
+for, looming on its hill just east of the walls — and no one talks
+about it. The road that once climbed to it lies broken, shattered
+spans over empty air that nothing crosses without wings or magic,
+and the town's sealed east gate (you can walk up and read its
+silence yourself) has not opened in a hundred years. The four
+vendors keep you busy with smaller things — until Dolm the trader
 hires you to recover a Mysterious Parchment from a vault said to lie
 deeper than the Sunken Crypt. He is right: it waits in the blackest
 corner of Bone Hollow, in a dead knight's keeping.
@@ -34,9 +39,10 @@ The survivors — Alda, Borin and Cyra — fled through the broken west
 gate to Westmere Village, where they trade on from a refugee camp of
 tents by the temple green. Laying Dolm to rest opens the boarded
 north gate, and beyond it the Northern Reaches: eight wild maps of
-orcs, gargoyles and worse, climbing level by level to the Fortress
-Approach — the doorstep of the Grey Fortress itself (the next
-region).
+orcs, gargoyles and worse. With the fortress's own road broken, the
+Reaches are the only way — circling the long way around the
+mountains, level by level, to the Fortress Approach: the doorstep of
+the Grey Fortress itself (the next region).
 
 A new run opens on one page of parchment telling the story so far —
 any key turns it over, and an Options toggle skips it forever.
@@ -88,9 +94,11 @@ Movement is keyboard-only; the mouse operates the UI.
 
 ## The world (camera follows you)
 
-1. Grey Fortress Town: 4 vendor houses, healing temple, north gate —
-   until the story burns it down to ash, charred shells and a broken
-   west gate (only the stone temple survives)
+1. Grey Fortress Town: 4 vendor houses, healing temple, north gate,
+   and — in the east wall — the sealed stone gate to the fortress's
+   broken road (bump it to read why no one goes that way). The story
+   burns the town down to ash, charred shells and a broken west
+   gate; only the stone temple and the fortress gate survive
 2. Northern Wilds: rats, goblins, wild boars
 3. Dark Forest: wolves and goblin archers, the densest trees
 4. Ancient Ruins: swarming with skeletons, plus goblins, archers and

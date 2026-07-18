@@ -176,7 +176,7 @@ func _draw_panel_intro() -> void:
 	var vs := get_viewport_rect().size
 	draw_rect(Rect2(0, 0, vs.x, vs.y), Color(0.02, 0.02, 0.04, 0.74))
 	var w := 660.0
-	var h := 480.0
+	var h := 500.0
 	var px := (vs.x - w) * 0.5
 	var py := (vs.y - BAR_H - h) * 0.5
 	draw_rect(Rect2(px - 5, py - 5, w + 10, h + 10), Color(0.32, 0.26, 0.16))
@@ -188,7 +188,7 @@ func _draw_panel_intro() -> void:
 	draw_string(font, Vector2(px + (w - tw) * 0.5, py + 58), title,
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 30, ink)
 	var paras := [
-		"For three hundred years the Grey Fortress has stood silent on its hill. No banner flies from its keep. No road climbs to its gate. The town below has long since learned not to look up.",
+		"For three hundred years the Grey Fortress has stood silent on its hill above the town. No banner flies from its keep. The road that once climbed to its gate lies broken - shattered spans over empty air, crossed by nothing that cannot fly or work magic - and the sealed east gate has not opened in a hundred years. The town below has long since learned not to look up.",
 		"You came for simpler things: coin, work, a warm hearth. Rats in the granary, goblins on the road - the small wars that keep a town alive.",
 		"But something stirs beneath the ruins to the north. In the deep places of the earth it waits - patient as parchment, quiet as wax - for a hand bold enough to break a seal.",
 	]
@@ -297,6 +297,7 @@ const MINI_TILE_COLORS := {
 	"B": Color(0.40, 0.30, 0.15), "O": Color(0.04, 0.04, 0.06),
 	"U": Color(0.80, 0.78, 0.72), "R": Color(0.16, 0.15, 0.14),
 	"F": Color(0.11, 0.09, 0.08), "E": Color(0.62, 0.54, 0.38),
+	"G": Color(0.24, 0.24, 0.32),
 }
 const FOG_COLOR := Color(0.05, 0.05, 0.07)
 
