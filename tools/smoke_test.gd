@@ -344,6 +344,30 @@ func _run(game: Node2D) -> void:
 				"the message history survives save/load")
 		DirAccess.remove_absolute(ProjectSettings.globalize_path("user://save10.json"))
 
+	# the options menu: Gameplay group, New Game / Quit Game with confirm
+	_check("Gameplay" in game.OPT_MAIN and "New Game" in game.OPT_MAIN \
+			and "Quit Game" in game.OPT_MAIN, "the options menu grew its new entries")
+	_check(game.OPT_GAMEPLAY.size() >= 4, "the Gameplay group has toggles to grow")
+	_check(game._gameplay_get("intro") == (not game.skip_intro), "the intro tick mirrors the setting")
+	var marks_before: bool = game.show_quest_marks
+	game._gameplay_toggle("marks")
+	_check(game.show_quest_marks != marks_before, "gameplay toggles flip")
+	game._gameplay_toggle("marks")
+	game.weather_enabled = true
+	game.raining = true
+	game._gameplay_toggle("weather")
+	_check(not game.raining, "turning weather off stops the rain")
+	game._gameplay_toggle("weather")
+	game._options_activate("Gameplay")
+	_check(game.options_screen == "gameplay", "Gameplay opens its own screen")
+	game._options_activate("New Game")
+	_check(game.options_screen == "confirm" and game.opt_confirm == "new",
+			"New Game asks for confirmation first")
+	game._options_activate("Quit Game")
+	_check(game.options_screen == "confirm" and game.opt_confirm == "quit",
+			"Quit Game asks for confirmation first")
+	game.options_screen = "main"
+
 	# the intro parchment: shown for title-screen runs, skippable forever
 	game.skip_intro = false
 	game._start(true)

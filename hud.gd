@@ -45,7 +45,7 @@ func _draw() -> void:
 		_draw_victory()
 	if game.game_over:
 		_draw_game_over()
-	if game.flash_alpha > 0.0:
+	if game.flash_alpha > 0.0 and game.show_flashes:
 		var vs := get_viewport_rect().size
 		draw_rect(Rect2(0, 0, vs.x, vs.y), Color(1.0, 1.0, 0.94, game.flash_alpha * 0.35))
 
@@ -908,17 +908,57 @@ func _draw_game_over() -> void:
 func _draw_panel_options() -> void:
 	match game.options_screen:
 		"main":
-			var p := _panel(420.0, 280.0, "Options")
+			var p := _panel(420.0, 340.0, "Options")
 			for i in game.OPT_MAIN.size():
 				var yy: float = p.y + 62 + i * 30
 				if game.opt_index == i:
 					draw_rect(Rect2(p.x + 8, yy - 18, 404, 26), Color(0.22, 0.26, 0.36))
-				var label: String = game.OPT_MAIN[i]
-				if label == "Intro story":
-					label += ": Skipped" if game.skip_intro else ": Shown"
-				draw_string(font, Vector2(p.x + 20, yy), label,
+				draw_string(font, Vector2(p.x + 20, yy), game.OPT_MAIN[i],
 						HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(0.88, 0.88, 0.9))
-			draw_string(font, Vector2(p.x + 16, p.y + 264), "Up/Down + Enter, or click/tap. Esc or right click closes.",
+			draw_string(font, Vector2(p.x + 16, p.y + 324), "Up/Down + Enter, or click/tap. Esc or right click closes.",
+					HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.5, 0.5, 0.58))
+		"gameplay":
+			# checkbox rows; geometry mirrors the "gameplay" branch of
+			# _options_click in main.gd
+			var h: float = 108.0 + game.OPT_GAMEPLAY.size() * 30.0
+			var p := _panel(460.0, h, "Options - Gameplay")
+			for i in game.OPT_GAMEPLAY.size():
+				var yy: float = p.y + 62 + i * 30
+				if game.opt_index == i:
+					draw_rect(Rect2(p.x + 8, yy - 18, 444, 26), Color(0.22, 0.26, 0.36))
+				var box := Rect2(p.x + 18, yy - 13, 16, 16)
+				draw_rect(box, Color(0.13, 0.13, 0.18))
+				draw_rect(box, Color(0.55, 0.55, 0.62), false, 1.0)
+				if game._gameplay_get(game.OPT_GAMEPLAY[i]["key"]):
+					draw_line(box.position + Vector2(3, 8), box.position + Vector2(7, 12),
+							Color(0.55, 0.9, 0.55), 2.0)
+					draw_line(box.position + Vector2(7, 12), box.position + Vector2(13, 4),
+							Color(0.55, 0.9, 0.55), 2.0)
+				draw_string(font, Vector2(p.x + 44, yy), game.OPT_GAMEPLAY[i]["label"],
+						HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.88, 0.88, 0.9))
+			draw_string(font, Vector2(p.x + 16, p.y + h - 16),
+					"Enter or click a row to toggle. Esc or right click goes back.",
+					HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.5, 0.5, 0.58))
+		"confirm":
+			# the are-you-sure screen for New Game / Quit Game; row
+			# geometry mirrors the "confirm" branch of _options_click
+			var p := _panel(460.0, 200.0, "Are you sure?")
+			var msg: String = "Abandon this run and start a new game?" \
+					if game.opt_confirm == "new" else "Quit Grey Fortress?"
+			draw_string(font, Vector2(p.x + 20, p.y + 52), msg,
+					HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.88, 0.88, 0.9))
+			draw_string(font, Vector2(p.x + 20, p.y + 70), "Unsaved progress will be lost.",
+					HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.72, 0.60, 0.55))
+			var rows := ["No, keep playing", "Yes"]
+			for i in rows.size():
+				var yy: float = p.y + 100 + i * 34
+				if game.opt_index == i:
+					draw_rect(Rect2(p.x + 8, yy - 20, 444, 30), Color(0.22, 0.26, 0.36))
+				draw_string(font, Vector2(p.x + 20, yy), rows[i],
+						HORIZONTAL_ALIGNMENT_LEFT, -1, 15,
+						Color(0.88, 0.88, 0.9) if i == 0 else Color(0.90, 0.72, 0.66))
+			draw_string(font, Vector2(p.x + 16, p.y + 184),
+					"Up/Down + Enter, or click. Esc or right click goes back.",
 					HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.5, 0.5, 0.58))
 		"graphics":
 			var p := _panel(420.0, 150.0, "Options - Graphics")

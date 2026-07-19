@@ -584,7 +584,12 @@ var opt_rebinding := false
 var opt_bind_slot := 0    # which of the two keybind slots is being edited
 var opt_slider_dragging := false
 var master_volume := 1.0
-var skip_intro := false   # options toggle: skip the intro parchment
+# Gameplay toggles (Options > Gameplay), all persisted in settings.
+var skip_intro := false        # skip the intro parchment on new runs
+var show_quest_marks := true   # "!" and "?" floating over quest givers
+var weather_enabled := true    # rain and thunder
+var show_flashes := true       # lightning screen flashes
+var opt_confirm := ""          # which action the are-you-sure screen guards
 var visited := {}         # maps the player has entered at least once
 var banner_text := ""
 var banner_timer := 0.0
@@ -906,7 +911,7 @@ func _load_map(id: String, arrive: String) -> void:
 	camera.limit_bottom = grid.size() * TILE + BAR_H / 2
 	combat_heat = 0
 	_update_music()
-	_set_rain(randf() < RAIN_CHANCE)
+	_set_rain(weather_enabled and randf() < RAIN_CHANCE)
 	if not visited.has(id):
 		visited[id] = true
 		banner_text = "Entering... %s" % map_name(id)
@@ -2797,7 +2802,79 @@ func _load_game(slot: int) -> void:
 #  Options: sound (master volume), keybinds, graphics.
 #  Settings persist to user://settings.cfg.
 # ---------------------------------------------------------
-const OPT_MAIN := ["Graphics", "Sound", "Keybinds", "Intro story", "Save Game", "Back"]
+const OPT_MAIN := ["Gameplay", "Graphics", "Sound", "Keybinds", "Save Game",
+		"New Game", "Quit Game", "Back"]
+
+# The Gameplay group: checkbox toggles, with room to grow.
+const OPT_GAMEPLAY := [
+	{ "key": "intro",   "label": "Intro story on new runs" },
+	{ "key": "marks",   "label": "Quest markers over givers (! and ?)" },
+	{ "key": "weather", "label": "Weather (rain and thunder)" },
+	{ "key": "flashes", "label": "Screen flashes (lightning)" },
+]
+
+func _gameplay_get(key: String) -> bool:
+	match key:
+		"intro": return not skip_intro   # ticked means the intro shows
+		"marks": return show_quest_marks
+		"weather": return weather_enabled
+		"flashes": return show_flashes
+	return false
+
+func _gameplay_toggle(key: String) -> void:
+	match key:
+		"intro":
+			skip_intro = not skip_intro
+		"marks":
+			show_quest_marks = not show_quest_marks
+		"weather":
+			weather_enabled = not weather_enabled
+			if not weather_enabled:
+				_set_rain(false)
+		"flashes":
+			show_flashes = not show_flashes
+			flash_alpha = 0.0
+	_save_settings()
+
+# One entry point for the main options rows, shared by keyboard and
+# mouse so the two can never drift apart.
+func _options_activate(entry: String) -> void:
+	match entry:
+		"Gameplay":
+			options_screen = "gameplay"
+			opt_index = 0
+		"Graphics":
+			options_screen = "graphics"
+			opt_index = 0
+		"Sound":
+			options_screen = "sound"
+			opt_index = 0
+		"Keybinds":
+			options_screen = "keybinds"
+			opt_index = 0
+		"Save Game":
+			options_screen = "saves"
+			opt_index = 0
+			_refresh_slot_cache()
+		"New Game":
+			options_screen = "confirm"
+			opt_confirm = "new"
+			opt_index = 0
+		"Quit Game":
+			options_screen = "confirm"
+			opt_confirm = "quit"
+			opt_index = 0
+		"Back":
+			_close_panel()
+			return
+	_refresh()
+
+# Yes on the are-you-sure screen: abandon the run, or leave the game.
+func _confirm_yes() -> void:
+	if opt_confirm == "quit":
+		get_tree().quit()
+	else:
+		_start(true)
 const REBIND_ACTIONS := ["up", "down", "left", "right",
 		"up_left", "up_right", "down_left", "down_right",
 		"wait", "character", "journal", "options",
@@ -2822,33 +2899,45 @@ func _options_input(key: int) -> void:
 			elif key == KEY_DOWN:
 				opt_index = min(opt_index + 1, OPT_MAIN.size() - 1)
 			elif key == KEY_ENTER or key == KEY_KP_ENTER:
-				match opt_index:
-					0: options_screen = "graphics"
-					1: options_screen = "sound"
-					2: options_screen = "keybinds"
-					3:
-						skip_intro = not skip_intro
-						_save_settings()
-						_refresh()
-						return
-					4:
-						options_screen = "saves"
-						_refresh_slot_cache()
-					5:
-						_close_panel()
-						return
-				opt_index = 0
+				_options_activate(OPT_MAIN[opt_index])
+				return
 			elif key == KEY_ESCAPE:
 				_close_panel()
 				return
 			_refresh()
+		"gameplay":
+			if key == KEY_UP:
+				opt_index = max(opt_index - 1, 0)
+			elif key == KEY_DOWN:
+				opt_index = min(opt_index + 1, OPT_GAMEPLAY.size() - 1)
+			elif key == KEY_ENTER or key == KEY_KP_ENTER:
+				_gameplay_toggle(OPT_GAMEPLAY[opt_index]["key"])
+			elif key == KEY_ESCAPE:
+				options_screen = "main"
+				opt_index = OPT_MAIN.find("Gameplay")
+			_refresh()
+		"confirm":
+			if key == KEY_UP or key == KEY_DOWN:
+				opt_index = 1 - opt_index
+				_refresh()
+			elif key == KEY_ENTER or key == KEY_KP_ENTER:
+				if opt_index == 1:
+					_confirm_yes()
+					return
+				options_screen = "main"
+				opt_index = OPT_MAIN.find("New Game" if opt_confirm == "new" else "Quit Game")
+				_refresh()
+			elif key == KEY_ESCAPE:
+				options_screen = "main"
+				opt_index = OPT_MAIN.find("New Game" if opt_confirm == "new" else "Quit Game")
+				_refresh()
 		"graphics":
 			if key == KEY_ENTER or key == KEY_KP_ENTER:
 				_toggle_fullscreen()
 				_save_settings()
 			elif key == KEY_ESCAPE:
 				options_screen = "main"
-				opt_index = 0
+				opt_index = OPT_MAIN.find("Graphics")
 			_refresh()
 		"sound":
 			if key == KEY_LEFT:
@@ -2861,7 +2950,7 @@ func _options_input(key: int) -> void:
 				_save_settings()
 			elif key == KEY_ESCAPE:
 				options_screen = "main"
-				opt_index = 1
+				opt_index = OPT_MAIN.find("Sound")
 			_refresh()
 		"keybinds":
 			if key == KEY_UP:
@@ -2874,7 +2963,7 @@ func _options_input(key: int) -> void:
 				opt_rebinding = true
 			elif key == KEY_ESCAPE:
 				options_screen = "main"
-				opt_index = 2
+				opt_index = OPT_MAIN.find("Keybinds")
 			_refresh()
 		"saves":
 			if key == KEY_UP:
@@ -2887,7 +2976,7 @@ func _options_input(key: int) -> void:
 				return
 			elif key == KEY_ESCAPE:
 				options_screen = "main"
-				opt_index = 4
+				opt_index = OPT_MAIN.find("Save Game")
 			_refresh()
 
 # Click/tap handling for the options menu. Geometry here must mirror
@@ -2900,29 +2989,44 @@ func _options_click(mp: Vector2, is_press: bool) -> void:
 			if not is_press:
 				return
 			var w := 420.0
-			var h := 280.0
+			var h := 340.0
 			var px := (vs.x - w) * 0.5
 			var py := (vs.y - BAR_H - h) * 0.5
 			for i in OPT_MAIN.size():
 				var yy := py + 62 + i * 30
 				if Rect2(px + 8, yy - 18, 404, 26).has_point(mp):
 					opt_index = i
-					match i:
-						0: options_screen = "graphics"
-						1: options_screen = "sound"
-						2: options_screen = "keybinds"
-						3:
-							skip_intro = not skip_intro
-							_save_settings()
-							_refresh()
-							return
-						4:
-							options_screen = "saves"
-							_refresh_slot_cache()
-						5:
-							_close_panel()
-							return
-					opt_index = 0
+					_options_activate(OPT_MAIN[i])
+					return
+		"gameplay":
+			if not is_press:
+				return
+			var w := 460.0
+			var h := 108.0 + OPT_GAMEPLAY.size() * 30.0
+			var px := (vs.x - w) * 0.5
+			var py := (vs.y - BAR_H - h) * 0.5
+			for i in OPT_GAMEPLAY.size():
+				var yy := py + 62 + i * 30
+				if Rect2(px + 8, yy - 18, 444, 26).has_point(mp):
+					opt_index = i
+					_gameplay_toggle(OPT_GAMEPLAY[i]["key"])
+					_refresh()
+					return
+		"confirm":
+			if not is_press:
+				return
+			var w := 460.0
+			var h := 200.0
+			var px := (vs.x - w) * 0.5
+			var py := (vs.y - BAR_H - h) * 0.5
+			for i in 2:
+				var yy := py + 100 + i * 34
+				if Rect2(px + 8, yy - 20, 444, 30).has_point(mp):
+					if i == 1:
+						_confirm_yes()
+						return
+					options_screen = "main"
+					opt_index = OPT_MAIN.find("New Game" if opt_confirm == "new" else "Quit Game")
 					_refresh()
 					return
 		"graphics":
@@ -2999,6 +3103,9 @@ func _save_settings() -> void:
 	cf.set_value("sound", "master", master_volume)
 	cf.set_value("graphics", "fullscreen", get_window().mode == Window.MODE_FULLSCREEN)
 	cf.set_value("game", "skip_intro", skip_intro)
+	cf.set_value("game", "quest_marks", show_quest_marks)
+	cf.set_value("game", "weather", weather_enabled)
+	cf.set_value("game", "flashes", show_flashes)
 	for a in REBIND_ACTIONS:
 		cf.set_value("keys", a, keymap[a])
 	cf.save("user://settings.cfg")
@@ -3009,6 +3116,9 @@ func _load_settings() -> void:
 		return
 	master_volume = cf.get_value("sound", "master", 1.0)
 	skip_intro = cf.get_value("game", "skip_intro", false)
+	show_quest_marks = cf.get_value("game", "quest_marks", true)
+	weather_enabled = cf.get_value("game", "weather", true)
+	show_flashes = cf.get_value("game", "flashes", true)
 	for a in REBIND_ACTIONS:
 		var v = cf.get_value("keys", a, keymap[a])
 		if typeof(v) == TYPE_INT:
@@ -3443,7 +3553,7 @@ func _draw_dolm_body() -> void:
 	draw_circle(c + Vector2(-10, 1), 3.4, Color(0.76, 0.59, 0.46))
 	draw_circle(c + Vector2(-1, 6), 2.2, Color(0.95, 0.82, 0.30))
 	draw_circle(c + Vector2(3, 8), 1.8, Color(0.95, 0.82, 0.30))
-	if inventory.get("parchment", 0) > 0:
+	if show_quest_marks and inventory.get("parchment", 0) > 0:
 		_draw_quest_mark(c + Vector2(0, -16), "?")
 
 # The town portal: a swirling blue oval standing in the home village.
@@ -3595,7 +3705,7 @@ func _draw_vendor(v: Dictionary) -> void:
 	draw_string(font, center + Vector2(-lw * 0.5, 23), label,
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.95, 0.92, 0.78))
 	# quest mark above the badge: "!" = quest to give, "?" = turn-in ready
-	if not quests.is_empty():
+	if show_quest_marks and not quests.is_empty():
 		var gidx: int = v["set_idx"] + (VENDORS.size() if v.get("set", "town") == "west" else 0)
 		var q: Dictionary = quests[gidx % quests.size()]
 		if q["state"] == "hidden":
