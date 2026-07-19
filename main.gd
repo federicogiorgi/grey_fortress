@@ -1493,7 +1493,13 @@ func _handle_click(mp: Vector2) -> void:
 		Mode.WORLDMAP:
 			_close_panel()
 		Mode.LOG:
-			pass   # wheel scrolls it; Esc or right click closes
+			# clicking outside the panel closes it (geometry mirrors
+			# _draw_panel_log in hud.gd); inside, the wheel scrolls
+			var lvs := get_viewport_rect().size
+			var lw: float = min(lvs.x - 200.0, 980.0)
+			var lh: float = lvs.y - BAR_H - 80.0
+			if not Rect2((lvs.x - lw) * 0.5, (lvs.y - BAR_H - lh) * 0.5, lw, lh).has_point(mp):
+				_close_panel()
 
 # The HUD buttons, stacked in two rows of three on the bar's right
 # edge so they claim a narrow column instead of a full-width strip.
@@ -1526,6 +1532,17 @@ func _bar_click(mp: Vector2) -> bool:
 			_close_panel()
 		else:
 			_open_log()
+		return true
+	# Clicking the active-spell block toggles the spellbook.
+	if Rect2(207.0, vs.y - BAR_H + 4.0, 138.0, BAR_H - 8.0).has_point(mp):
+		if mode == Mode.SPELLBOOK:
+			_close_panel()
+		else:
+			if mode == Mode.SHOP:
+				current_shop = -1
+			mode = Mode.SPELLBOOK
+			spellbook_index = SPELL_ORDER.find(active_spell)
+			_refresh()
 		return true
 	var rects := bar_button_rects()
 	var targets := [Mode.INVENTORY, Mode.JOURNAL, Mode.SPELLBOOK, Mode.WORLDMAP, Mode.OPTIONS]
@@ -3771,8 +3788,14 @@ func draw_hero_on(ci: CanvasItem, c: Vector2, s: float) -> void:
 		ci.draw_line(c + Vector2(7, 3) * s, c + Vector2(11.5, -9) * s, Color(0.75, 0.78, 0.85), 1.6 * s)
 		ci.draw_line(c + Vector2(6, -1.5) * s, c + Vector2(9.5, -0.2) * s, Color(0.45, 0.32, 0.14), 1.4 * s)
 	if equipment.has(16):  # shield on the off hand
-		ci.draw_circle(c + Vector2(-8.5, 0) * s, 4.2 * s, Color(0.48, 0.34, 0.16))
-		ci.draw_circle(c + Vector2(-8.5, 0) * s, 4.2 * s, Color(0.28, 0.19, 0.08), false, 1.2 * s)
+		if equipment[16] == "tshield":
+			# the tower shield: a tall brown rectangle, banded
+			ci.draw_rect(Rect2(c + Vector2(-12, -6) * s, Vector2(7, 13) * s), Color(0.48, 0.34, 0.16))
+			ci.draw_rect(Rect2(c + Vector2(-12, -6) * s, Vector2(7, 13) * s), Color(0.28, 0.19, 0.08), false, 1.2 * s)
+			ci.draw_line(c + Vector2(-12, 0.5) * s, c + Vector2(-5, 0.5) * s, Color(0.28, 0.19, 0.08), 1.0 * s)
+		else:
+			ci.draw_circle(c + Vector2(-8.5, 0) * s, 4.2 * s, Color(0.48, 0.34, 0.16))
+			ci.draw_circle(c + Vector2(-8.5, 0) * s, 4.2 * s, Color(0.28, 0.19, 0.08), false, 1.2 * s)
 	if equipment.has(17):  # wand tucked into the belt
 		ci.draw_line(c + Vector2(-4, 2.5) * s, c + Vector2(-8, -4.5) * s, Color(0.58, 0.40, 0.18), 1.5 * s)
 		ci.draw_circle(c + Vector2(-8, -4.5) * s, 1.3 * s, Color(0.65, 0.75, 1.0))

@@ -104,7 +104,9 @@ Movement is keyboard-only; the mouse operates the UI.
   cancel a rebind or an aimed spell, leave the death screen); the
   one thing it never does is open a menu
 - Mouse: the Inventory / Journal / Spells / Map / Options buttons in
-  the HUD bar are clickable (click again to close); click items in
+  the HUD bar are clickable (click again to close), as are the bar's
+  message area (opens the log; clicking outside the open log closes
+  it) and the active-spell box (opens the spellbook); click items in
   the character sheet to equip/unequip/use; click rows in a shop to
   buy/sell/buy back; click options menu entries and drag the volume
   slider

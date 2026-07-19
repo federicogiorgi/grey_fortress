@@ -296,6 +296,16 @@ func _run(game: Node2D) -> void:
 	kecho.echo = true
 	game._unhandled_input(kecho)
 	_check(game.mode == game.Mode.PLAY, "echo keys stay ignored outside the log")
+
+	# bar clicks: the spell box opens the spellbook; clicking outside
+	# the open log panel closes it
+	var bvs: Vector2 = game.get_viewport_rect().size
+	game._bar_click(Vector2(220.0, bvs.y - game.BAR_H + 30.0))
+	_check(game.mode == game.Mode.SPELLBOOK, "clicking the spell box opens the spellbook")
+	game._close_panel()
+	game._open_log()
+	game._handle_click(Vector2(5.0, 5.0))
+	_check(game.mode == game.Mode.PLAY, "clicking outside the log closes it")
 	for i in game.LOG_KEEP + 100:
 		game._log("filler line %d" % i)
 	_check(game.messages.size() == game.LOG_KEEP, "history caps at LOG_KEEP messages")

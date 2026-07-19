@@ -271,8 +271,13 @@ func _draw_bar() -> void:
 	if game.player_spell_dmg > 0:
 		stats = "Lv %d   Dmg %d   Spell +%d   Coins %d" % [game.player_level, game.player_dmg,
 				game.player_spell_dmg, game.coins]
+	# big late-game numbers shrink the font rather than cross the column
+	var stats_size := 12
+	while stats_size > 8 \
+			and font.get_string_size(stats, HORIZONTAL_ALIGNMENT_LEFT, -1, stats_size).x > 190.0:
+		stats_size -= 1
 	draw_string(font, Vector2(10, y + 76), stats,
-			HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.72, 0.70, 0.60))
+			HORIZONTAL_ALIGNMENT_LEFT, -1, stats_size, Color(0.72, 0.70, 0.60))
 
 	# --- column 2: the active spell, in its own reserved block ---
 	draw_line(Vector2(206, y + 8), Vector2(206, y + BAR_H - 8), sep, 1.0)
