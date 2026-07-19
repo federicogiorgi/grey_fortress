@@ -30,6 +30,11 @@ extends Node2D
 #  v4: unique vendors, sell/buyback, victory, clickable HUD.
 # =============================================================
 
+# The game version: bump alongside the header above, and use the
+# same string as the GitHub release tag. Watermarked on the title
+# screen and in the corner of the HUD bar.
+const VERSION := "v11"
+
 enum Mode { TITLE, INTRO, PLAY, INVENTORY, JOURNAL, SHOP, OPTIONS, SPELLBOOK, WORLDMAP, LOG }
 
 const TILE := 32

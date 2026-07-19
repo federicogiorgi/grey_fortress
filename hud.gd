@@ -122,6 +122,11 @@ func _draw_title() -> void:
 	draw_string(font, Vector2((vs.x - sw) * 0.5, vs.y * 0.135 + 28), sub,
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(0.55, 0.56, 0.65))
 
+	# version watermark, tucked into the corner
+	var ver_w: float = font.get_string_size(game.VERSION, HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x
+	draw_string(font, Vector2(vs.x - ver_w - 10, vs.y - 10), game.VERSION,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.45, 0.46, 0.55, 0.85))
+
 	# the load-game slot picker replaces the menu while it is open
 	if game.title_screen == "load":
 		var header := "Load Game"
@@ -312,6 +317,11 @@ func _draw_bar() -> void:
 		var tw: float = font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x
 		draw_string(font, Vector2(r.position.x + (r.size.x - tw) * 0.5, r.position.y + 17.5),
 				label, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.82, 0.82, 0.86))
+
+	# version watermark, barely there, in the bar's corner
+	var ver_w: float = font.get_string_size(game.VERSION, HORIZONTAL_ALIGNMENT_LEFT, -1, 9).x
+	draw_string(font, Vector2(vs.x - ver_w - 6, vs.y - 4), game.VERSION,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(0.45, 0.45, 0.52, 0.55))
 
 # Cuts a string down (with "...") so it fits max_w at the font size.
 func _trim(text: String, size: int, max_w: float) -> String:

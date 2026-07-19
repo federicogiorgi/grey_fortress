@@ -344,6 +344,10 @@ func _run(game: Node2D) -> void:
 				"the message history survives save/load")
 		DirAccess.remove_absolute(ProjectSettings.globalize_path("user://save10.json"))
 
+	# the version constant matches the release-tag convention
+	_check(game.VERSION.begins_with("v") and game.VERSION.length() >= 2,
+			"VERSION is set for the watermark and release tags")
+
 	# the options menu: Gameplay group, New Game / Quit Game with confirm
 	_check("Gameplay" in game.OPT_MAIN and "New Game" in game.OPT_MAIN \
 			and "Quit Game" in game.OPT_MAIN, "the options menu grew its new entries")
