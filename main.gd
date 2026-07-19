@@ -2079,6 +2079,14 @@ func _damage_mob(index: int, dmg: int, verb: String) -> void:
 	var mob = mobs[index]
 	var t: Dictionary = MOB_TYPES[mob["type"]]
 	mob["hp"] -= dmg
+	# Pain is remembered: a struck monster turns hostile, pursuing
+	# the player even from beyond its sight range (and keeping the
+	# combat music burning). Announced once, when the anger is news.
+	if mob["hp"] > 0 and not mob.get("angry", false):
+		mob["angry"] = true
+		var mdist: int = abs(mob["pos"].x - player_pos.x) + abs(mob["pos"].y - player_pos.y)
+		if mdist > t["sight"]:
+			_log("The %s snaps around, enraged, and comes for you!" % t["name"])
 	if mob["hp"] <= 0:
 		var mpos: Vector2i = mob["pos"]
 		mobs.remove_at(index)
@@ -2649,7 +2657,8 @@ func _save_game(slot: int) -> void:
 		var st: Dictionary = map_state[id]
 		var ms := []
 		for m in st["mobs"]:
-			ms.append({ "x": m["pos"].x, "y": m["pos"].y, "hp": m["hp"], "type": m["type"] })
+			ms.append({ "x": m["pos"].x, "y": m["pos"].y, "hp": m["hp"], "type": m["type"],
+					"angry": m.get("angry", false) })
 		var its := []
 		for it in st["items"]:
 			its.append({ "x": it["pos"].x, "y": it["pos"].y, "id": it["id"] })
@@ -2768,7 +2777,8 @@ func _load_game(slot: int) -> void:
 		var st: Dictionary = map_state[id]
 		var ms := []
 		for m in data["maps"][id]["mobs"]:
-			ms.append({ "pos": Vector2i(int(m["x"]), int(m["y"])), "hp": int(m["hp"]), "type": m["type"] })
+			ms.append({ "pos": Vector2i(int(m["x"]), int(m["y"])), "hp": int(m["hp"]),
+					"type": m["type"], "angry": bool(m.get("angry", false)) })
 		st["mobs"] = ms
 		var its := []
 		for it in data["maps"][id]["items"]:
@@ -3252,7 +3262,9 @@ func _enemy_in_sight() -> bool:
 		var t: Dictionary = MOB_TYPES[mob["type"]]
 		var mp: Vector2i = mob["pos"]
 		var d: int = abs(player_pos.x - mp.x) + abs(player_pos.y - mp.y)
-		if d <= t["sight"]:
+		# angry mobs count too, out to the same distance where they
+		# stop acting at all
+		if d <= t["sight"] or (mob.get("angry", false) and d <= 40):
 			return true
 	return false
 
@@ -3303,7 +3315,7 @@ func _mob_turn() -> void:
 				continue
 
 		var step := Vector2i.ZERO
-		if abs(diff.x) + abs(diff.y) <= t["sight"]:
+		if abs(diff.x) + abs(diff.y) <= t["sight"] or mob.get("angry", false):
 			var options := []
 			if diff.x != 0 and diff.y != 0:
 				options.append(Vector2i(sign(diff.x), sign(diff.y)))

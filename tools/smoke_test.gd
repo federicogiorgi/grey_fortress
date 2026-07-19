@@ -222,6 +222,25 @@ func _run(game: Node2D) -> void:
 	_check(game.mobs.is_empty(), "the Fire Ball catches the whole 3x3 blast")
 	_check(game.player_mana == 10, "the blast cost 10 mana")
 
+	# spell-struck monsters turn hostile: pursuit and combat music,
+	# even from far beyond their sight range (boar sight is 5)
+	for dx in 14:
+		game.grid[game.player_pos.y][game.player_pos.x + dx] = "."
+	game.mobs = [{ "pos": game.player_pos + Vector2i(12, 0), "hp": 5, "type": "b" }]
+	game.active_spell = "arrow"
+	game.player_mana = 20
+	game._fire_at(game.player_pos + Vector2i(12, 0))
+	game._advance_projectiles(10.0)
+	_check(game.mobs[0].get("angry", false), "a struck boar turns hostile")
+	_check(game._enemy_in_sight(), "anger keeps the combat music burning")
+	var bdist: int = abs(game.mobs[0]["pos"].x - game.player_pos.x) \
+			+ abs(game.mobs[0]["pos"].y - game.player_pos.y)
+	game._mob_turn()
+	var adist: int = abs(game.mobs[0]["pos"].x - game.player_pos.x) \
+			+ abs(game.mobs[0]["pos"].y - game.player_pos.y)
+	_check(adist < bdist, "the enraged boar pursues from beyond its sight")
+	game.mobs = []
+
 	# the fall of Grey Fortress: returning with the parchment burns it
 	_check(not game.town_burned, "the town starts whole")
 	game._add_item("parchment")

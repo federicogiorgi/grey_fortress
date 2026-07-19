@@ -231,6 +231,10 @@ its entrance tile.
   for the enemy
 - Ranged mobs: goblin archers shoot arrows and wraiths hex from
   afar whenever they can see you
+- Aggro: any monster struck by a spell (or blade) turns hostile —
+  it remembers, pursues you even from far beyond its sight range,
+  and keeps the combat music burning until one of you falls; the
+  grudge survives save/load
 - Mana: slowly regenerates as you take turns (1 per 6), and is fully
   restored by leveling up, praying at the altar, or mana potions
   (sold by Cyra the alchemist)
