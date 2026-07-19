@@ -766,7 +766,9 @@ func _blank_explored(w: int, h: int) -> Array:
 #  First step is instant, then a short pause, then repeat.
 # ---------------------------------------------------------
 func _process(delta: float) -> void:
-	if banner_timer > 0.0:
+	# The area banner pauses while lore covers the screen (the intro
+	# parchment), then plays in full once the page is turned.
+	if banner_timer > 0.0 and mode != Mode.INTRO:
 		banner_timer -= delta
 		hud.queue_redraw()
 	if not portal.is_empty() and current_map == portal["home"]:

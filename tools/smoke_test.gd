@@ -250,6 +250,7 @@ func _run(game: Node2D) -> void:
 	_check(game.mode == game.Mode.INTRO, "a fresh run opens on the intro parchment")
 	game._close_intro()
 	_check(game.mode == game.Mode.PLAY, "any key dismisses the intro")
+	_check(game.banner_timer > 0.0, "the area banner waits its turn behind the intro")
 	game.skip_intro = true
 	game._start(true)
 	_check(game.mode == game.Mode.PLAY, "the option skips the intro entirely")

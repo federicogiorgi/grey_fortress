@@ -37,7 +37,7 @@ func _draw() -> void:
 			_draw_panel_worldmap()
 	if game.mode == game.Mode.PLAY and game.targeting:
 		_draw_targeting()
-	if game.banner_timer > 0.0:
+	if game.banner_timer > 0.0 and game.mode != game.Mode.INTRO:
 		_draw_banner()
 	if game.victory_banner:
 		_draw_victory()
