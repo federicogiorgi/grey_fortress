@@ -306,6 +306,22 @@ func _run(game: Node2D) -> void:
 	game._open_log()
 	game._handle_click(Vector2(5.0, 5.0))
 	_check(game.mode == game.Mode.PLAY, "clicking outside the log closes it")
+	game.mode = game.Mode.INVENTORY
+	game._handle_click(Vector2(5.0, 5.0))
+	_check(game.mode == game.Mode.PLAY, "clicking outside the character sheet closes it")
+	game.mode = game.Mode.SPELLBOOK
+	game._handle_click(Vector2(5.0, 5.0))
+	_check(game.mode == game.Mode.PLAY, "clicking outside the spellbook closes it")
+
+	# unique loot is sellable now (only the parchment is priceless)
+	game._add_item("armor")
+	game.current_shop = 0
+	var armor_sells: Array = game.shop_entries().filter(
+			func(e): return e["kind"] == "sell" and e["id"] == "armor")
+	_check(not armor_sells.is_empty(), "Leather Armor appears in the sell list")
+	_check(game.sell_price("runeblade") > 0, "the Runeblade has a sell value")
+	_check(game.ITEMS["parchment"]["price"] == 0, "the parchment stays priceless")
+	game._remove_item("armor")
 	for i in game.LOG_KEEP + 100:
 		game._log("filler line %d" % i)
 	_check(game.messages.size() == game.LOG_KEEP, "history caps at LOG_KEEP messages")

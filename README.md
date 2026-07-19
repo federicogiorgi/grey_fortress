@@ -105,8 +105,9 @@ Movement is keyboard-only; the mouse operates the UI.
   one thing it never does is open a menu
 - Mouse: the Inventory / Journal / Spells / Map / Options buttons in
   the HUD bar are clickable (click again to close), as are the bar's
-  message area (opens the log; clicking outside the open log closes
-  it) and the active-spell box (opens the spellbook); click items in
+  message area (opens the log) and the active-spell box (opens the
+  spellbook); clicking outside any open panel (character sheet,
+  shop, spellbook, message log) closes it, like Esc; click items in
   the character sheet to equip/unequip/use; click rows in a shop to
   buy/sell/buy back; click options menu entries and drag the volume
   slider
@@ -232,7 +233,9 @@ its entrance tile.
   variant (e.g. Iron Sword +1 dmg for 25c, Steel Sword +2 dmg for
   60c); the unique loot hidden in the world outposts (Scout's Boots,
   Hunter's Belt, Ancient Legplates) and the dungeons (Sunken Crown,
-  Runeblade) outclasses everything in shops
+  Runeblade) outclasses everything in shops — and carries a hefty
+  sell value, if you can bear to part with it (only the quest
+  parchment cannot be sold)
 - Weather: entering an area has a 10% chance of rain — a cozy
   synthesized rain loop with animated streaks, plus occasional
   distant lightning (thunder rumble and a brief screen flash)

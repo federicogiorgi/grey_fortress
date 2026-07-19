@@ -241,8 +241,8 @@ const MOB_TYPES := {
 }
 
 # Vendor stock comes in two tiers per item type: the second tier is
-# pricier but stronger. World loot (price 0, found in outposts and
-# ruins) beats anything a vendor sells.
+# pricier but stronger. Unique world loot (found in outposts and
+# dungeons, never sold in any stock) beats anything a vendor sells.
 const ITEMS := {
 	"bread":  { "name": "Fresh Bread",      "price": 4,  "heal": 4,
 			"desc": "Restores 4 HP" },
@@ -324,17 +324,20 @@ const ITEMS := {
 			"desc": "Quest item, sealed with grey wax" },
 	"tpscroll": { "name": "Scroll of Town Portal", "price": 30, "portal": true,
 			"desc": "Teleports you home and back" },
-	"armor":  { "name": "Leather Armor",    "price": 0, "slot": 4,  "hp": 4,
+	# Unique world loot: never in any stock, but priced so it can be
+	# sold (at half, like everything) if you really want to part with
+	# it. Only the parchment is priceless: quest items are not goods.
+	"armor":  { "name": "Leather Armor",    "price": 30, "slot": 4,  "hp": 4,
 			"desc": "+4 max HP" },
-	"boots":  { "name": "Scout's Boots",     "price": 0, "slot": 7,  "hp": 6,
+	"boots":  { "name": "Scout's Boots",     "price": 70, "slot": 7,  "hp": 6,
 			"desc": "+6 max HP" },
-	"belt":   { "name": "Hunter's Belt",     "price": 0, "slot": 5,  "hp": 8,
+	"belt":   { "name": "Hunter's Belt",     "price": 90, "slot": 5,  "hp": 8,
 			"desc": "+8 max HP" },
-	"legplates": { "name": "Ancient Legplates", "price": 0, "slot": 6, "hp": 9,
+	"legplates": { "name": "Ancient Legplates", "price": 100, "slot": 6, "hp": 9,
 			"desc": "+9 max HP" },
-	"crown":  { "name": "Sunken Crown",      "price": 0, "slot": 0,  "hp": 10,
+	"crown":  { "name": "Sunken Crown",      "price": 120, "slot": 0,  "hp": 10,
 			"desc": "+10 max HP" },
-	"runeblade": { "name": "Runeblade",      "price": 0, "slot": 15, "dmg": 3,
+	"runeblade": { "name": "Runeblade",      "price": 150, "slot": 15, "dmg": 3,
 			"desc": "+3 damage" },
 }
 
@@ -1639,6 +1642,10 @@ func _char_sheet_click(mp: Vector2) -> void:
 	var h := 596.0
 	var px := (vs.x - w) * 0.5
 	var py := (vs.y - BAR_H - h) * 0.5
+	# clicking outside the sheet closes it, like Esc
+	if not Rect2(px, py, w, h).has_point(mp):
+		_close_panel()
+		return
 	var top := py + 60.0
 	for i in SLOT_NAMES.size():
 		if Rect2(px + 10, top + i * 23.0 - 15.0, 320, 21).has_point(mp):
@@ -1761,6 +1768,11 @@ func _shop_click(mp: Vector2) -> void:
 	var h := 96.0 + entries.size() * SHOP_ROW_H
 	var px := (vs.x - SHOP_W) * 0.5
 	var py := (vs.y - BAR_H - h) * 0.5
+	# clicking outside the shop closes it, like Esc
+	if not Rect2(px, py, SHOP_W, h).has_point(mp):
+		current_shop = -1
+		_close_panel()
+		return
 	var act := 0
 	for i in entries.size():
 		var e: Dictionary = entries[i]
@@ -1988,6 +2000,10 @@ func _spellbook_click(mp: Vector2) -> void:
 	var h := 96.0 + SPELL_ORDER.size() * SPB_ROW_H
 	var px := (vs.x - SPB_W) * 0.5
 	var py := (vs.y - BAR_H - h) * 0.5
+	# clicking outside the spellbook closes it, like Esc
+	if not Rect2(px, py, SPB_W, h).has_point(mp):
+		_close_panel()
+		return
 	for i in SPELL_ORDER.size():
 		if Rect2(px + 8, py + SPB_TOP + i * SPB_ROW_H, SPB_W - 16.0, SPB_ROW_H - 6.0).has_point(mp):
 			spellbook_index = i
