@@ -539,6 +539,7 @@ var run_end_text := ""     # shown on the death screen
 var victory_banner := false
 var victory_moves := 0
 var title_index := 0
+var title_screen := "main"   # "main" menu or the "load" slot picker
 var held_dir := Vector2i.ZERO
 var move_timer := 0.0
 
@@ -652,6 +653,7 @@ func _sfx(sound: String) -> void:
 func _show_title() -> void:
 	mode = Mode.TITLE
 	title_index = 0
+	title_screen = "main"
 	game_over = false
 	victory_banner = false
 	projectiles.clear()
@@ -1416,6 +1418,9 @@ func _unhandled_input(event: InputEvent) -> void:
 # click popping up a menu would feel like a misfire.
 func _handle_right_click() -> void:
 	if mode == Mode.TITLE:
+		if title_screen == "load":
+			title_screen = "main"
+			_refresh()
 		return
 	if game_over:
 		_show_title()
@@ -2462,7 +2467,30 @@ func title_menu_rects() -> Array:
 		rects.append(Rect2(vs.x * 0.5 - 120.0, vs.y * 0.74 + i * 44.0, 240.0, 36.0))
 	return rects
 
+# Row geometry of the load-game slot picker, shared with hud.gd.
+func title_slot_rects() -> Array:
+	var vs := get_viewport_rect().size
+	var rects := []
+	for i in SAVE_SLOTS:
+		rects.append(Rect2(vs.x * 0.5 - 270.0, vs.y * 0.26 + i * 40.0, 540.0, 34.0))
+	return rects
+
 func _title_input(key: int) -> void:
+	if title_screen == "load":
+		match key:
+			KEY_ESCAPE:
+				title_screen = "main"
+				_refresh()
+			KEY_UP, KEY_W:
+				title_index = max(title_index - 1, 0)
+				_refresh()
+			KEY_DOWN, KEY_S:
+				title_index = min(title_index + 1, SAVE_SLOTS - 1)
+				_refresh()
+			KEY_ENTER, KEY_KP_ENTER:
+				if save_slot_cache[title_index]["exists"]:
+					_load_game(title_index + 1)
+		return
 	match key:
 		KEY_UP, KEY_W:
 			title_index = max(title_index - 1, 0)
@@ -2474,6 +2502,17 @@ func _title_input(key: int) -> void:
 			_title_activate(title_index)
 
 func _title_click(mp: Vector2) -> void:
+	if title_screen == "load":
+		var rects := title_slot_rects()
+		for i in rects.size():
+			if (rects[i] as Rect2).has_point(mp):
+				title_index = i
+				if save_slot_cache[i]["exists"]:
+					_load_game(i + 1)
+				else:
+					_refresh()
+				return
+		return
 	var rects := title_menu_rects()
 	for i in rects.size():
 		if (rects[i] as Rect2).has_point(mp):
@@ -2487,22 +2526,66 @@ func _title_activate(i: int) -> void:
 			_start(true)
 		1:
 			if has_save():
-				_load_game()
+				title_screen = "load"
+				title_index = 0
+				_refresh_slot_cache()
+				_refresh()
 		2:
 			get_tree().quit()
 
 
 # ---------------------------------------------------------
 #  Save / load. The world regenerates deterministically, so a
-#  save only stores the dynamic state: player, quests, and the
-#  surviving mobs / remaining ground items of each visited map.
+#  save only stores the dynamic state: player, quests, message
+#  history, and the surviving mobs / remaining ground items of
+#  each visited map. Ten slots; the pre-slot save.json stands
+#  in for slot 1 until something is saved over it.
 # ---------------------------------------------------------
-const SAVE_PATH := "user://save.json"
+const SAVE_SLOTS := 10
+
+var save_slot_cache := []   # [{exists, label}] rebuilt when a picker opens
+
+func _slot_path(slot: int) -> String:
+	return "user://save%d.json" % slot
+
+# The file to READ for a slot (the numbered file, or the legacy
+# single save standing in for slot 1); "" when the slot is empty.
+func _slot_read_path(slot: int) -> String:
+	if FileAccess.file_exists(_slot_path(slot)):
+		return _slot_path(slot)
+	if slot == 1 and FileAccess.file_exists("user://save.json"):
+		return "user://save.json"
+	return ""
 
 func has_save() -> bool:
-	return FileAccess.file_exists(SAVE_PATH)
+	for i in range(1, SAVE_SLOTS + 1):
+		if _slot_read_path(i) != "":
+			return true
+	return false
 
-func _save_game() -> void:
+# One line per slot for the pickers: level, place, save time.
+func _refresh_slot_cache() -> void:
+	save_slot_cache = []
+	for i in range(1, SAVE_SLOTS + 1):
+		var entry := { "exists": false, "label": "- empty -" }
+		var path := _slot_read_path(i)
+		if path != "":
+			entry["exists"] = true
+			entry["label"] = "a save"
+			var f := FileAccess.open(path, FileAccess.READ)
+			if f != null:
+				var data = JSON.parse_string(f.get_as_text())
+				f.close()
+				if typeof(data) == TYPE_DICTIONARY:
+					var mapid: String = data.get("current_map", "town")
+					var mname: String = MAP_DEFS[mapid]["name"] if MAP_DEFS.has(mapid) else "?"
+					if mapid == "town" and data.get("town_burned", false):
+						mname = "Ruins of Grey Fortress"
+					entry["label"] = "Lv %d  -  %s  -  %s" % [int(data.get("player_level", 1)),
+							mname, str(data.get("saved_at", "an older save"))]
+		save_slot_cache.append(entry)
+
+func _save_game(slot: int) -> void:
 	var maps := {}
 	for id in map_state:
 		var st: Dictionary = map_state[id]
@@ -2523,8 +2606,8 @@ func _save_game() -> void:
 				ex.append(s)
 			maps[id]["explored"] = ex
 	var equip := {}
-	for slot in equipment:
-		equip[str(slot)] = equipment[slot]
+	for eq_slot in equipment:
+		equip[str(eq_slot)] = equipment[eq_slot]
 	var qs := []
 	for q in quests:
 		qs.append({ "state": q["state"], "progress": q["progress"] })
@@ -2533,7 +2616,8 @@ func _save_game() -> void:
 		portal_data = { "map": portal["map"], "x": portal["pos"].x, "y": portal["pos"].y,
 				"home": portal["home"], "hx": portal["home_pos"].x, "hy": portal["home_pos"].y }
 	var data := {
-		"version": 2,
+		"version": 3,
+		"saved_at": Time.get_datetime_string_from_system(false, true),
 		"base_max_hp": base_max_hp, "base_dmg": base_dmg, "base_max_mana": base_max_mana,
 		"player_level": player_level, "player_xp": player_xp,
 		"player_hp": player_hp, "player_mana": player_mana,
@@ -2544,15 +2628,19 @@ func _save_game() -> void:
 		"active_spell": active_spell,
 		"parchment_found": parchment_found, "town_burned": town_burned,
 		"portal": portal_data,
+		"log": messages,
 		"visited": visited.keys(), "maps": maps,
 	}
-	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
+	var f := FileAccess.open(_slot_path(slot), FileAccess.WRITE)
 	f.store_string(JSON.stringify(data))
 	f.close()
-	_log("Game saved.")
+	_log("Game saved to slot %d." % slot)
 
-func _load_game() -> void:
-	var f := FileAccess.open(SAVE_PATH, FileAccess.READ)
+func _load_game(slot: int) -> void:
+	var path := _slot_read_path(slot)
+	if path == "":
+		return
+	var f := FileAccess.open(path, FileAccess.READ)
 	if f == null:
 		return
 	var data = JSON.parse_string(f.get_as_text())
@@ -2580,8 +2668,8 @@ func _load_game() -> void:
 	# rather than trusted from the file, so saves survive any
 	# renumbering of SLOT_NAMES (e.g. the removal of the Ammo slot).
 	equipment = {}
-	for slot in data["equipment"]:
-		var eq_id: String = data["equipment"][slot]
+	for eq_slot in data["equipment"]:
+		var eq_id: String = data["equipment"][eq_slot]
 		if not ITEMS.has(eq_id):
 			continue
 		var s: int = ITEMS[eq_id]["slot"]
@@ -2649,7 +2737,10 @@ func _load_game() -> void:
 	_recalc_stats()
 	player_hp = int(data["player_hp"])
 	player_mana = int(data["player_mana"])
+	# restore the message history the run had when it was saved
 	messages = []
+	for m in data.get("log", []):
+		messages.append(str(m))
 	_log("Game loaded. Welcome back.")
 	_refresh()
 
@@ -2693,9 +2784,8 @@ func _options_input(key: int) -> void:
 						_refresh()
 						return
 					4:
-						_save_game()
-						_close_panel()
-						return
+						options_screen = "saves"
+						_refresh_slot_cache()
 					5:
 						_close_panel()
 						return
@@ -2738,6 +2828,19 @@ func _options_input(key: int) -> void:
 				options_screen = "main"
 				opt_index = 2
 			_refresh()
+		"saves":
+			if key == KEY_UP:
+				opt_index = max(opt_index - 1, 0)
+			elif key == KEY_DOWN:
+				opt_index = min(opt_index + 1, SAVE_SLOTS - 1)
+			elif key == KEY_ENTER or key == KEY_KP_ENTER:
+				_save_game(opt_index + 1)
+				_close_panel()
+				return
+			elif key == KEY_ESCAPE:
+				options_screen = "main"
+				opt_index = 4
+			_refresh()
 
 # Click/tap handling for the options menu. Geometry here must mirror
 # _draw_panel_options in hud.gd. is_press is true for the initial click/tap
@@ -2766,9 +2869,8 @@ func _options_click(mp: Vector2, is_press: bool) -> void:
 							_refresh()
 							return
 						4:
-							_save_game()
-							_close_panel()
-							return
+							options_screen = "saves"
+							_refresh_slot_cache()
 						5:
 							_close_panel()
 							return
@@ -2819,6 +2921,19 @@ func _options_click(mp: Vector2, is_press: bool) -> void:
 						opt_rebinding = true
 						_refresh()
 						return
+		"saves":
+			if not is_press:
+				return
+			var h := 108.0 + SAVE_SLOTS * 26.0
+			var w := 560.0
+			var px := (vs.x - w) * 0.5
+			var py := (vs.y - BAR_H - h) * 0.5
+			for i in SAVE_SLOTS:
+				var yy := py + 62 + i * 26
+				if Rect2(px + 8, yy - 17, 544, 24).has_point(mp):
+					_save_game(i + 1)
+					_close_panel()
+					return
 
 func _toggle_fullscreen() -> void:
 	var win := get_window()
@@ -3056,7 +3171,7 @@ func _vendor_at(p: Vector2i) -> int:
 #  Messages. The bar shows the tail; the full history lives in
 #  the scrollable, searchable log panel (L).
 # ---------------------------------------------------------
-const LOG_KEEP := 300   # how much history the log panel remembers
+const LOG_KEEP := 1000  # how much history the log panel remembers
 
 var log_scroll := 0     # lines scrolled up from the bottom
 var log_search := ""    # live filter typed inside the log panel

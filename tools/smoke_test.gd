@@ -258,9 +258,27 @@ func _run(game: Node2D) -> void:
 	_check(game.log_search == "" and game.mode == game.Mode.LOG, "Esc clears the search first")
 	game._log_panel_input(kesc)
 	_check(game.mode == game.Mode.PLAY, "Esc then closes the log")
-	for i in 400:
+	for i in game.LOG_KEEP + 100:
 		game._log("filler line %d" % i)
 	_check(game.messages.size() == game.LOG_KEEP, "history caps at LOG_KEEP messages")
+	_check(game.LOG_KEEP == 1000, "history keeps 1000 messages")
+
+	# ten save slots; the message log travels inside the save.
+	# (Slot 10 is used only if free, and its file is removed after.)
+	game._refresh_slot_cache()
+	_check(game.save_slot_cache.size() == game.SAVE_SLOTS, "the slot cache lists 10 slots")
+	_check(game.title_slot_rects().size() == game.SAVE_SLOTS, "the load picker has 10 rows")
+	if game._slot_read_path(10) == "":
+		game._log("marker line for the save test")
+		game._save_game(10)
+		game._refresh_slot_cache()
+		_check(game.save_slot_cache[9]["exists"], "saving fills slot 10")
+		game._start()
+		_check(not "\n".join(game.messages).contains("marker line"), "a new run starts with a fresh log")
+		game._load_game(10)
+		_check("\n".join(game.messages).contains("marker line for the save test"),
+				"the message history survives save/load")
+		DirAccess.remove_absolute(ProjectSettings.globalize_path("user://save10.json"))
 
 	# the intro parchment: shown for title-screen runs, skippable forever
 	game.skip_intro = false

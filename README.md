@@ -229,10 +229,14 @@ its entrance tile.
 - Quest journal (J): grouped by area — the town's quests under one
   header, Westmere's under another — and only quests you have
   actually been given appear; unmet givers stay hidden
-- Save / load: "Save Game" in the options menu writes
-  user://save.json; "Continue" on the title screen restores it
-  (the world regenerates deterministically, so only the dynamic
-  state — player, quests, surviving mobs, remaining loot — is saved)
+- Save / load: ten save slots. "Save Game" in the options menu
+  opens the slot list (each occupied slot shows level, place and
+  save time; picking one overwrites it); "Continue" on the title
+  screen opens the same list to load. The message history travels
+  inside the save, and the world regenerates deterministically, so
+  only the dynamic state — player, quests, log, surviving mobs,
+  remaining loot — is stored. A pre-slot save.json still loads as
+  slot 1
 - Death screen: shows when the run began and ended, steps taken,
   and the level you reached
 - Victory: finishing all twelve quests shows a "Victory!" screen

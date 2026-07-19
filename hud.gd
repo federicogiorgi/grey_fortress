@@ -122,6 +122,34 @@ func _draw_title() -> void:
 	draw_string(font, Vector2((vs.x - sw) * 0.5, vs.y * 0.135 + 28), sub,
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(0.55, 0.56, 0.65))
 
+	# the load-game slot picker replaces the menu while it is open
+	if game.title_screen == "load":
+		var header := "Load Game"
+		var hw: float = font.get_string_size(header, HORIZONTAL_ALIGNMENT_LEFT, -1, 24).x
+		draw_string(font, Vector2((vs.x - hw) * 0.5 + 2, vs.y * 0.22 + 2), header,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 24, Color(0, 0, 0, 0.7))
+		draw_string(font, Vector2((vs.x - hw) * 0.5, vs.y * 0.22), header,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 24, Color(0.92, 0.90, 0.80))
+		var srects: Array = game.title_slot_rects()
+		for i in srects.size():
+			var r: Rect2 = srects[i]
+			var info: Dictionary = game.save_slot_cache[i]
+			var selected: bool = game.title_index == i
+			draw_rect(r, Color(0.16, 0.19, 0.30, 0.92) if selected else Color(0.07, 0.08, 0.13, 0.88))
+			draw_rect(r, Color(0.85, 0.72, 0.20) if selected else Color(0.32, 0.32, 0.40), false, 1.0)
+			draw_string(font, Vector2(r.position.x + 14, r.position.y + 23), "Slot %d" % (i + 1),
+					HORIZONTAL_ALIGNMENT_LEFT, -1, 14,
+					Color(0.92, 0.90, 0.80) if info["exists"] else Color(0.5, 0.5, 0.58))
+			draw_string(font, Vector2(r.position.x + 92, r.position.y + 23), info["label"],
+					HORIZONTAL_ALIGNMENT_LEFT, -1, 13,
+					Color(0.85, 0.85, 0.88) if info["exists"] else Color(0.45, 0.45, 0.52))
+		var hint := "Up/Down + Enter or click a slot. Esc or right click goes back."
+		var hnw: float = font.get_string_size(hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x
+		var last: Rect2 = srects[srects.size() - 1]
+		draw_string(font, Vector2((vs.x - hnw) * 0.5, last.position.y + last.size.y + 26), hint,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.55, 0.56, 0.65))
+		return
+
 	# menu
 	var rects: Array = game.title_menu_rects()
 	for i in rects.size():
@@ -896,6 +924,26 @@ func _draw_panel_options() -> void:
 			_meter(Vector2(p.x + 20, p.y + 76), 380.0, game.master_volume,
 					Color(0.75, 0.62, 0.20), "")
 			draw_string(font, Vector2(p.x + 16, p.y + 144), "Left/Right adjust, or click/drag the bar. Esc or right click goes back.",
+					HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.5, 0.5, 0.58))
+		"saves":
+			# Ten save slots; row geometry mirrors the "saves" branch
+			# of _options_click in main.gd.
+			if game.save_slot_cache.size() != game.SAVE_SLOTS:
+				game._refresh_slot_cache()
+			var h: float = 108.0 + game.SAVE_SLOTS * 26.0
+			var p := _panel(560.0, h, "Options - Save Game")
+			for i in game.SAVE_SLOTS:
+				var yy: float = p.y + 62 + i * 26
+				if game.opt_index == i:
+					draw_rect(Rect2(p.x + 8, yy - 17, 544, 24), Color(0.22, 0.26, 0.36))
+				var info: Dictionary = game.save_slot_cache[i]
+				draw_string(font, Vector2(p.x + 20, yy), "Slot %d" % (i + 1),
+						HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.88, 0.88, 0.9))
+				draw_string(font, Vector2(p.x + 96, yy), info["label"],
+						HORIZONTAL_ALIGNMENT_LEFT, -1, 13,
+						Color(0.85, 0.85, 0.88) if info["exists"] else Color(0.5, 0.5, 0.58))
+			draw_string(font, Vector2(p.x + 16, p.y + h - 16),
+					"Enter or click a slot to save (overwrites it). Esc or right click goes back.",
 					HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.5, 0.5, 0.58))
 		"keybinds":
 			# Every action has two keybind cells; cell geometry must
