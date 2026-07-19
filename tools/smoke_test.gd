@@ -348,9 +348,11 @@ func _run(game: Node2D) -> void:
 	_check(game.VERSION.begins_with("v") and game.VERSION.length() >= 2,
 			"VERSION is set for the watermark and release tags")
 
-	# the options menu: Gameplay group, New Game / Quit Game with confirm
-	_check("Gameplay" in game.OPT_MAIN and "New Game" in game.OPT_MAIN \
-			and "Quit Game" in game.OPT_MAIN, "the options menu grew its new entries")
+	# the options menu: Gameplay group, Load Game, Restart / Quit with
+	# confirmation, and no Back row (Esc / right click / outside-click)
+	_check("Gameplay" in game.OPT_MAIN and "Restart" in game.OPT_MAIN \
+			and "Quit Game" in game.OPT_MAIN and "Load Game" in game.OPT_MAIN \
+			and not ("Back" in game.OPT_MAIN), "the options menu has its entries")
 	_check(game.OPT_GAMEPLAY.size() >= 4, "the Gameplay group has toggles to grow")
 	_check(game._gameplay_get("intro") == (not game.skip_intro), "the intro tick mirrors the setting")
 	var marks_before: bool = game.show_quest_marks
@@ -364,13 +366,24 @@ func _run(game: Node2D) -> void:
 	game._gameplay_toggle("weather")
 	game._options_activate("Gameplay")
 	_check(game.options_screen == "gameplay", "Gameplay opens its own screen")
-	game._options_activate("New Game")
-	_check(game.options_screen == "confirm" and game.opt_confirm == "new",
-			"New Game asks for confirmation first")
+	game._options_activate("Restart")
+	_check(game.options_screen == "confirm" and game.opt_confirm == "restart",
+			"Restart asks for confirmation first")
 	game._options_activate("Quit Game")
 	_check(game.options_screen == "confirm" and game.opt_confirm == "quit",
 			"Quit Game asks for confirmation first")
-	game.options_screen = "main"
+	game._options_activate("Load Game")
+	_check(game.options_screen == "loads", "Load Game opens the slot picker")
+	# clicking outside the panel behaves like Esc: back to main, then closed
+	game.mode = game.Mode.OPTIONS
+	game._options_click(Vector2(2.0, 2.0), true)
+	_check(game.options_screen == "main", "outside-click steps a sub-screen back")
+	game._options_click(Vector2(2.0, 2.0), true)
+	_check(game.mode == game.Mode.PLAY, "outside-click closes the main options")
+	# confirming Restart returns to the title screen
+	game.opt_confirm = "restart"
+	game._confirm_yes()
+	_check(game.mode == game.Mode.TITLE, "Restart returns to the title screen")
 
 	# the intro parchment: shown for title-screen runs, skippable forever
 	game.skip_intro = false

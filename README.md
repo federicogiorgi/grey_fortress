@@ -312,10 +312,13 @@ its entrance tile.
 - Options menu (O or Esc): a Gameplay group of checkbox toggles
   (intro story on new runs, quest markers over givers, weather,
   lightning screen flashes — with room for more), Graphics
-  (fullscreen), Sound (master volume), Keybinds, the ten save
-  slots, and New Game / Quit Game behind an are-you-sure prompt;
-  menu items and the sound slider also respond to mouse
-  click/drag; settings persist to user://settings.cfg
+  (fullscreen), Sound (master volume), Keybinds, Save Game and
+  Load Game (the ten slots), and Restart (back to the title
+  screen) / Quit Game behind an are-you-sure prompt. Esc, right
+  click or clicking outside the panel steps back and closes —
+  there is no Back row; menu items and the sound slider also
+  respond to mouse click/drag; settings persist to
+  user://settings.cfg
 - Each wilderness map hides a loot outpost: a small stone keep
   holding a unique item (boots, belt, legplates)
 

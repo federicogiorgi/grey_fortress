@@ -2808,7 +2808,7 @@ func _load_game(slot: int) -> void:
 #  Settings persist to user://settings.cfg.
 # ---------------------------------------------------------
 const OPT_MAIN := ["Gameplay", "Graphics", "Sound", "Keybinds", "Save Game",
-		"New Game", "Quit Game", "Back"]
+		"Load Game", "Restart", "Quit Game"]
 
 # The Gameplay group: checkbox toggles, with room to grow.
 const OPT_GAMEPLAY := [
@@ -2861,25 +2861,52 @@ func _options_activate(entry: String) -> void:
 			options_screen = "saves"
 			opt_index = 0
 			_refresh_slot_cache()
-		"New Game":
+		"Load Game":
+			options_screen = "loads"
+			opt_index = 0
+			_refresh_slot_cache()
+		"Restart":
 			options_screen = "confirm"
-			opt_confirm = "new"
+			opt_confirm = "restart"
 			opt_index = 0
 		"Quit Game":
 			options_screen = "confirm"
 			opt_confirm = "quit"
 			opt_index = 0
-		"Back":
-			_close_panel()
-			return
 	_refresh()
 
-# Yes on the are-you-sure screen: abandon the run, or leave the game.
+# Yes on the are-you-sure screen: back to the title, or leave the game.
 func _confirm_yes() -> void:
-	if opt_confirm == "quit":
-		get_tree().quit()
-	else:
-		_start(true)
+	match opt_confirm:
+		"quit":
+			get_tree().quit()
+		"restart":
+			_show_title()
+
+# The on-screen rectangle of the current options panel; sizes must
+# match what hud.gd draws. A click outside it behaves like Esc.
+func _options_panel_rect() -> Rect2:
+	var vs := get_viewport_rect().size
+	var w := 420.0
+	var h := 340.0
+	match options_screen:
+		"gameplay":
+			w = 460.0
+			h = 108.0 + OPT_GAMEPLAY.size() * 30.0
+		"graphics":
+			h = 150.0
+		"sound":
+			h = 160.0
+		"keybinds":
+			w = 560.0
+			h = 110.0 + REBIND_ACTIONS.size() * 26.0
+		"saves", "loads":
+			w = 560.0
+			h = 108.0 + SAVE_SLOTS * 26.0
+		"confirm":
+			w = 460.0
+			h = 200.0
+	return Rect2((vs.x - w) * 0.5, (vs.y - BAR_H - h) * 0.5, w, h)
 const REBIND_ACTIONS := ["up", "down", "left", "right",
 		"up_left", "up_right", "down_left", "down_right",
 		"wait", "character", "journal", "options",
@@ -2930,11 +2957,11 @@ func _options_input(key: int) -> void:
 					_confirm_yes()
 					return
 				options_screen = "main"
-				opt_index = OPT_MAIN.find("New Game" if opt_confirm == "new" else "Quit Game")
+				opt_index = OPT_MAIN.find("Restart" if opt_confirm == "restart" else "Quit Game")
 				_refresh()
 			elif key == KEY_ESCAPE:
 				options_screen = "main"
-				opt_index = OPT_MAIN.find("New Game" if opt_confirm == "new" else "Quit Game")
+				opt_index = OPT_MAIN.find("Restart" if opt_confirm == "restart" else "Quit Game")
 				_refresh()
 		"graphics":
 			if key == KEY_ENTER or key == KEY_KP_ENTER:
@@ -2983,12 +3010,30 @@ func _options_input(key: int) -> void:
 				options_screen = "main"
 				opt_index = OPT_MAIN.find("Save Game")
 			_refresh()
+		"loads":
+			if key == KEY_UP:
+				opt_index = max(opt_index - 1, 0)
+			elif key == KEY_DOWN:
+				opt_index = min(opt_index + 1, SAVE_SLOTS - 1)
+			elif key == KEY_ENTER or key == KEY_KP_ENTER:
+				if save_slot_cache[opt_index]["exists"]:
+					_load_game(opt_index + 1)
+				return
+			elif key == KEY_ESCAPE:
+				options_screen = "main"
+				opt_index = OPT_MAIN.find("Load Game")
+			_refresh()
 
 # Click/tap handling for the options menu. Geometry here must mirror
 # _draw_panel_options in hud.gd. is_press is true for the initial click/tap
 # and false for a drag/motion update (used to slide the volume meter).
 func _options_click(mp: Vector2, is_press: bool) -> void:
 	var vs := get_viewport_rect().size
+	# a click outside the current panel behaves exactly like Esc:
+	# sub-screens step back, the main screen closes
+	if is_press and not _options_panel_rect().has_point(mp):
+		_options_input(KEY_ESCAPE)
+		return
 	match options_screen:
 		"main":
 			if not is_press:
@@ -3031,7 +3076,7 @@ func _options_click(mp: Vector2, is_press: bool) -> void:
 						_confirm_yes()
 						return
 					options_screen = "main"
-					opt_index = OPT_MAIN.find("New Game" if opt_confirm == "new" else "Quit Game")
+					opt_index = OPT_MAIN.find("Restart" if opt_confirm == "restart" else "Quit Game")
 					_refresh()
 					return
 		"graphics":
@@ -3090,6 +3135,22 @@ func _options_click(mp: Vector2, is_press: bool) -> void:
 				if Rect2(px + 8, yy - 17, 544, 24).has_point(mp):
 					_save_game(i + 1)
 					_close_panel()
+					return
+		"loads":
+			if not is_press:
+				return
+			var h := 108.0 + SAVE_SLOTS * 26.0
+			var w := 560.0
+			var px := (vs.x - w) * 0.5
+			var py := (vs.y - BAR_H - h) * 0.5
+			for i in SAVE_SLOTS:
+				var yy := py + 62 + i * 26
+				if Rect2(px + 8, yy - 17, 544, 24).has_point(mp):
+					opt_index = i
+					if save_slot_cache[i]["exists"]:
+						_load_game(i + 1)
+					else:
+						_refresh()
 					return
 
 func _toggle_fullscreen() -> void:

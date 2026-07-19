@@ -953,8 +953,8 @@ func _draw_panel_options() -> void:
 			# the are-you-sure screen for New Game / Quit Game; row
 			# geometry mirrors the "confirm" branch of _options_click
 			var p := _panel(460.0, 200.0, "Are you sure?")
-			var msg: String = "Abandon this run and start a new game?" \
-					if game.opt_confirm == "new" else "Quit Grey Fortress?"
+			var msg: String = "Abandon this run and return to the title screen?" \
+					if game.opt_confirm == "restart" else "Quit Grey Fortress?"
 			draw_string(font, Vector2(p.x + 20, p.y + 52), msg,
 					HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.88, 0.88, 0.9))
 			draw_string(font, Vector2(p.x + 20, p.y + 70), "Unsaved progress will be lost.",
@@ -986,25 +986,28 @@ func _draw_panel_options() -> void:
 					Color(0.75, 0.62, 0.20), "")
 			draw_string(font, Vector2(p.x + 16, p.y + 144), "Left/Right adjust, or click/drag the bar. Esc or right click goes back.",
 					HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.5, 0.5, 0.58))
-		"saves":
-			# Ten save slots; row geometry mirrors the "saves" branch
-			# of _options_click in main.gd.
+		"saves", "loads":
+			# Ten save slots, shared by saving and loading; row
+			# geometry mirrors the matching _options_click branches.
 			if game.save_slot_cache.size() != game.SAVE_SLOTS:
 				game._refresh_slot_cache()
+			var loading: bool = game.options_screen == "loads"
 			var h: float = 108.0 + game.SAVE_SLOTS * 26.0
-			var p := _panel(560.0, h, "Options - Save Game")
+			var p := _panel(560.0, h, "Options - Load Game" if loading else "Options - Save Game")
 			for i in game.SAVE_SLOTS:
 				var yy: float = p.y + 62 + i * 26
 				if game.opt_index == i:
 					draw_rect(Rect2(p.x + 8, yy - 17, 544, 24), Color(0.22, 0.26, 0.36))
 				var info: Dictionary = game.save_slot_cache[i]
 				draw_string(font, Vector2(p.x + 20, yy), "Slot %d" % (i + 1),
-						HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.88, 0.88, 0.9))
+						HORIZONTAL_ALIGNMENT_LEFT, -1, 14,
+						Color(0.88, 0.88, 0.9) if (info["exists"] or not loading) else Color(0.5, 0.5, 0.58))
 				draw_string(font, Vector2(p.x + 96, yy), info["label"],
 						HORIZONTAL_ALIGNMENT_LEFT, -1, 13,
 						Color(0.85, 0.85, 0.88) if info["exists"] else Color(0.5, 0.5, 0.58))
 			draw_string(font, Vector2(p.x + 16, p.y + h - 16),
-					"Enter or click a slot to save (overwrites it). Esc or right click goes back.",
+					"Enter or click an occupied slot to load. Esc or right click goes back." if loading
+					else "Enter or click a slot to save (overwrites it). Esc or right click goes back.",
 					HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.5, 0.5, 0.58))
 		"keybinds":
 			# Every action has two keybind cells; cell geometry must
