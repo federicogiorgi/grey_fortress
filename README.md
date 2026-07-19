@@ -238,8 +238,13 @@ its entrance tile.
   half of the slain mobs (per type, rounded up) come back, placed
   away from where you arrive
 - "Entering..." banner the first time you reach each area
-- HP (red), Mana (blue), XP (green) bars in the HUD, plus clickable
-  Inventory / Journal / Spells / Map / Options buttons
+- HUD bar in four fixed columns: HP/Mana/XP meters with the stat
+  line, the active spell block, a word-wrapped message log that can
+  never run under the controls, and the five clickable panel
+  buttons stacked in two rows on the right
+- Vendors talk like people who lived the story: the refugees greet
+  you with words about the fire (Borin's grief points you to Dolm's
+  shop), and every quest ends with its giver's own thank-you line
 - Minimap (bottom-right): the real terrain of the current area,
   rendered once into a texture, with your position and the area
   name; slightly translucent, so loot lying under the overlay still

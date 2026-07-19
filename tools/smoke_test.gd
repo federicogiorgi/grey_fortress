@@ -45,6 +45,8 @@ func _run(game: Node2D) -> void:
 			for id in q["reward_items"]:
 				_check(game.ITEMS.has(id),
 						"%s's quest rewards a real item (%s)" % [vd["name"], id])
+		if q.get("target", "") != "parchment":
+			_check(q.has("outro"), "%s's quest has a completion line" % vd["name"])
 		game.current_shop = i
 		_check(game.shop_entries().size() > 0, "%s's shop panel builds" % vd["name"])
 
@@ -223,6 +225,17 @@ func _run(game: Node2D) -> void:
 	_check(game.vendors.size() == 11, "Westmere holds 8 locals and 3 refugees")
 	var refugees: Array = game.vendors.filter(func(v): return v.get("set", "") == "town")
 	_check(refugees.size() == 3, "Dolm is not among the refugees")
+
+	# the refugees speak of the fire, not of business as usual
+	game._talk_to_vendor(8)   # Alda: first talk hands out her quest
+	game._talk_to_vendor(8)   # second talk: her burned greeting
+	_check("\n".join(game.messages).contains("bread rises"), "refugees speak of the fire")
+
+	# the bar buttons stack in two rows in their own right-hand column
+	var brects: Array = game.bar_button_rects()
+	_check(brects.size() == 5, "five panel buttons")
+	_check(brects[0].position.y != brects[3].position.y, "buttons stack in two rows")
+	_check(brects[0].position.x == game.bar_buttons_left(), "the button column starts at bar_buttons_left")
 
 	# Dolm's last wish opens the road north into the Reaches
 	_check(game.fortress_road_open(), "Dolm's quest opens the fortress road")

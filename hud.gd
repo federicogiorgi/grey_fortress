@@ -217,44 +217,54 @@ func _draw_banner() -> void:
 
 
 # ---------------- bottom status bar ----------------
+# Four fixed columns, left to right: meters + stats, the active
+# spell, the message log (word-wrapped to its own column, so it can
+# never run under anything), and the panel buttons in two rows.
+const BAR_SPELL_X := 214.0     # spell block: 206..346
+const BAR_MSG_X := 356.0       # message log starts here
+
 func _draw_bar() -> void:
 	var vs := get_viewport_rect().size
 	var y := vs.y - BAR_H
 	draw_rect(Rect2(0, y, vs.x, BAR_H), Color(0.06, 0.06, 0.08, 0.92))
 	draw_line(Vector2(0, y), Vector2(vs.x, y), Color(0.3, 0.3, 0.35), 2.0)
+	var sep := Color(0.20, 0.20, 0.25)
 
+	# --- column 1: the three meters and the stat line ---
 	_meter(Vector2(10, y + 7), 190.0, float(max(game.player_hp, 0)) / game.player_max_hp,
 			Color(0.72, 0.16, 0.14), "%d/%d" % [max(game.player_hp, 0), game.player_max_hp])
 	_meter(Vector2(10, y + 26), 190.0, float(game.player_mana) / game.player_max_mana,
 			Color(0.16, 0.32, 0.78), "%d/%d" % [game.player_mana, game.player_max_mana])
 	_meter(Vector2(10, y + 45), 190.0, float(game.player_xp) / game.xp_needed(),
 			Color(0.20, 0.55, 0.22), "%d/%d" % [game.player_xp, game.xp_needed()])
-	# The area name lives on the minimap now, so this line stays short
-	# and can no longer collide with the message log.
-	draw_string(font, Vector2(10, y + 76),
-			"Lv %d   Dmg %d   Coins %d" % [game.player_level, game.player_dmg, game.coins],
+	var stats := "Lv %d   Dmg %d   Coins %d" % [game.player_level, game.player_dmg, game.coins]
+	if game.player_spell_dmg > 0:
+		stats = "Lv %d   Dmg %d   Spell +%d   Coins %d" % [game.player_level, game.player_dmg,
+				game.player_spell_dmg, game.coins]
+	draw_string(font, Vector2(10, y + 76), stats,
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.72, 0.70, 0.60))
 
-	var start: int = max(0, game.messages.size() - 4)
-	var line := 0
-	for i in range(start, game.messages.size()):
-		draw_string(font, Vector2(230, y + 18 + line * 17), game.messages[i],
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.78, 0.78, 0.80))
-		line += 1
-
-	# The active spell, castable with the cast key or middle mouse.
+	# --- column 2: the active spell, in its own reserved block ---
+	draw_line(Vector2(206, y + 8), Vector2(206, y + BAR_H - 8), sep, 1.0)
 	var sp: Dictionary = game.SPELLS[game.active_spell]
-	var spell_x := vs.x - 489.0
-	draw_rect(Rect2(spell_x, y + 10, 26, 26), Color(0.13, 0.13, 0.18))
-	draw_rect(Rect2(spell_x, y + 10, 26, 26), Color(0.38, 0.38, 0.44), false, 1.0)
-	game.draw_projectile_icon(self, game.active_spell, Vector2(spell_x + 13, y + 23), 0.0, 1.0)
-	draw_string(font, Vector2(spell_x + 34, y + 22), sp["name"],
+	draw_rect(Rect2(BAR_SPELL_X, y + 20, 26, 26), Color(0.13, 0.13, 0.18))
+	draw_rect(Rect2(BAR_SPELL_X, y + 20, 26, 26), Color(0.38, 0.38, 0.44), false, 1.0)
+	game.draw_projectile_icon(self, game.active_spell, Vector2(BAR_SPELL_X + 13, y + 33), 0.0, 1.0)
+	draw_string(font, Vector2(BAR_SPELL_X + 34, y + 30), _trim(sp["name"], 12, 94.0),
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.82, 0.82, 0.90))
-	draw_string(font, Vector2(spell_x + 34, y + 37),
-			"%d mana - %s casts" % [sp["mana"], game.spell_key_label()],
+	draw_string(font, Vector2(BAR_SPELL_X + 34, y + 46),
+			_trim("%d mana - %s" % [sp["mana"], game.spell_key_label()], 10, 94.0),
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.55, 0.55, 0.62))
 
-	# Clickable panel buttons (movement itself stays keyboard-only).
+	# --- column 3: the message log, wrapped to fit its column ---
+	draw_line(Vector2(346, y + 8), Vector2(346, y + BAR_H - 8), sep, 1.0)
+	var msg_w: float = max(game.bar_buttons_left() - 12.0 - BAR_MSG_X, 80.0)
+	var lines := _bar_messages(msg_w)
+	for i in lines.size():
+		draw_string(font, Vector2(BAR_MSG_X, y + 18 + i * 17), lines[i],
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.78, 0.78, 0.80))
+
+	# --- column 4: clickable panel buttons, two rows of three ---
 	var rects: Array = game.bar_button_rects()
 	var target_modes := [game.Mode.INVENTORY, game.Mode.JOURNAL, game.Mode.SPELLBOOK,
 			game.Mode.WORLDMAP, game.Mode.OPTIONS]
@@ -267,6 +277,49 @@ func _draw_bar() -> void:
 		var tw: float = font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x
 		draw_string(font, Vector2(r.position.x + (r.size.x - tw) * 0.5, r.position.y + 17.5),
 				label, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.82, 0.82, 0.86))
+
+# Cuts a string down (with "...") so it fits max_w at the font size.
+func _trim(text: String, size: int, max_w: float) -> String:
+	if font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x <= max_w:
+		return text
+	while text.length() > 1 \
+			and font.get_string_size(text + "...", HORIZONTAL_ALIGNMENT_LEFT, -1, size).x > max_w:
+		text = text.substr(0, text.length() - 1)
+	return text + "..."
+
+# Greedy word-wrap of one message into lines that fit max_w.
+func _wrap_text(text: String, size: int, max_w: float) -> Array:
+	var lines := []
+	var cur := ""
+	for wd in text.split(" "):
+		var trial := wd if cur == "" else cur + " " + wd
+		if cur != "" and font.get_string_size(trial, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x > max_w:
+			lines.append(cur)
+			cur = wd
+		else:
+			cur = trial
+	if cur != "":
+		lines.append(cur)
+	return lines
+
+# The last four wrapped log lines, cached (wrapping measures every
+# word, and the bar redraws each frame during rain or portal shimmer).
+var _msg_cache_key := ""
+var _msg_cache: Array = []
+
+func _bar_messages(max_w: float) -> Array:
+	var tail: Array = game.messages.slice(max(0, game.messages.size() - 4))
+	var key := "%d|%s" % [int(max_w), "\n".join(tail)]
+	if key == _msg_cache_key:
+		return _msg_cache
+	var lines := []
+	for m in tail:
+		lines.append_array(_wrap_text(m, 13, max_w))
+	while lines.size() > 4:
+		lines.pop_front()
+	_msg_cache_key = key
+	_msg_cache = lines
+	return lines
 
 # One resource meter: dark trough, colored fill, thin border, value inside.
 func _meter(pos: Vector2, w: float, frac: float, col: Color, label: String) -> void:

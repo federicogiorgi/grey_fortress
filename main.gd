@@ -345,28 +345,37 @@ const SLOT_NAMES := [
 const BASE_INV_SLOTS := 20
 
 
+# Town vendors carry a second greeting ("greet_burned") for their
+# days in the refugee camp, and each quest an "outro" line spoken
+# when it is turned in - the story leaks through the small talk.
 const VENDORS := [
 	{
 		"name": "Alda the baker", "short": "Alda", "symbol": "bread", "stock": ["bread", "stew"],
 		"greet": "Alda: Fresh bread! Well, fresh-ish.",
+		"greet_burned": "Alda: The oven burned with everything else. But bread rises, and so will we.",
 		"quest": { "desc": "Kill 5 rats", "type": "kill", "target": "r", "need": 5,
 				"intro": "Rats got into my flour again. Thin their numbers, would you?",
+				"outro": "Alda: The flour is safe. You are welcome at my table, always.",
 				"reward_coins": 20, "reward_xp": 15 },
 	},
 	{
 		"name": "Borin the smith", "short": "Borin", "symbol": "anvil",
 		"stock": ["sword", "ssword", "shield", "tshield", "cap", "helm"],
 		"greet": "Borin: Steel solves most problems.",
+		"greet_burned": "Borin: This anvil is borrowed. Mine sleeps under Dolm's rubble - as does Dolm. He never left his shop.",
 		"quest": { "desc": "Kill 3 goblins", "type": "kill", "target": "g", "need": 3,
 				"intro": "Goblins stole a crate of nails. Make them regret it.",
+				"outro": "Borin: Good. Nails are small things - but wars are lost for small things.",
 				"reward_coins": 25, "reward_xp": 15 },
 	},
 	{
 		"name": "Cyra the alchemist", "short": "Cyra", "symbol": "flask",
 		"stock": ["potion", "gpotion", "mpotion", "tpscroll", "charm", "talisman"],
 		"greet": "Cyra: Potions brewing. Do not rush art.",
+		"greet_burned": "Cyra: I bottled what I could the night of the fire. The rest fed the flames.",
 		"quest": { "desc": "Bring me 10 coins", "type": "coins", "need": 10,
 				"intro": "Reagents are expensive. Fund my research with 10 coins?",
+				"outro": "Cyra: Splendid! Take these - and if a potion ever smells of almonds, do not drink it.",
 				"reward_items": { "potion": 2, "tpscroll": 2 }, "reward_xp": 20 },
 	},
 	{
@@ -375,7 +384,7 @@ const VENDORS := [
 		"greet": "Dolm: Rare goods for discerning customers.",
 		"quest": { "desc": "Recover the Mysterious Parchment from the depths below the ruins",
 				"type": "item", "target": "parchment", "need": 1,
-				"intro": "Old ledgers speak of a sealed parchment locked in a vault below the Ancient Ruins - deeper than the crypt, they say. Bring it to me, whatever it takes.",
+				"intro": "Old ledgers speak of a sealed parchment locked in a vault below the Ancient Ruins - deeper than the crypt, they say. Seals on such things are warnings as much as locks... but coin is coin. Bring it to me, whatever it takes.",
 				"reward_coins": 60, "reward_items": { "armor": 1 }, "reward_xp": 50 },
 	},
 ]
@@ -391,7 +400,8 @@ const WEST_VENDORS := [
 		"stock": ["shirt", "sshirt", "cloak", "fcloak", "tabard", "bag", "lbag"],
 		"greet": "Wren: Finest cloth west of the fortress.",
 		"quest": { "desc": "Kill 4 wolves", "type": "kill", "target": "w", "need": 4,
-				"intro": "My looms want wool, but the wolves in the Dark Forest have gotten bold. Cull 4 of them?",
+				"intro": "My looms want wool, but the wolves have gotten bold since the fire drove everything wild. Cull 4 of them?",
+				"outro": "Wren: Winter wool at last. I shall weave you into the tapestry - a small figure, mind.",
 				"reward_coins": 30, "reward_xp": 20 },
 	},
 	{
@@ -400,32 +410,36 @@ const WEST_VENDORS := [
 		"stock": ["sausage", "ham", "bread", "pie"],
 		"greet": "Tobin: Meat and bread under one roof - Pell and I joined forces.",
 		"quest": { "desc": "Kill 3 wild boars", "type": "kill", "target": "b", "need": 3,
-				"intro": "The boars in the Northern Wilds trampled my pens. Bring down 3 and the smokehouse pays you back.",
+				"intro": "Boar sign all around my pens this morning. Bring down 3 and the smokehouse pays you back.",
+				"outro": "Tobin: The smokehouse sings again. Pell is already kneading in your honor.",
 				"reward_items": { "ham": 2 }, "reward_xp": 20 },
 	},
 	{
 		"name": "Mira the herbalist", "short": "Mira",  "symbol": "flask",
 		"stock": ["salve", "tonic", "tpscroll"],
-		"greet": "Mira: Every ailment has its herb.",
+		"greet": "Mira: Every ailment has its herb. Grief takes longest to steep.",
 		"quest": { "desc": "Bring 2 Healing Potions", "type": "item", "target": "potion", "need": 2,
 				"intro": "My whole shelf of potions spoiled in the damp. Bring me 2 Healing Potions to restock?",
+				"outro": "Mira: Fresh stock. The road north will empty these shelves faster than I can fill them.",
 				"reward_items": { "gpotion": 2 }, "reward_xp": 25 },
 	},
 	{
 		"name": "Galt the armorer",   "short": "Galt",  "symbol": "anvil",
 		"stock": ["chain", "plate", "gauntlets"],
-		"greet": "Galt: Good armor is cheaper than a funeral.",
+		"greet": "Galt: Good armor is cheaper than a funeral. Ask the east.",
 		"quest": { "desc": "Kill 2 trolls", "type": "kill", "target": "t", "need": 2,
-				"intro": "They say troll hide turns my best steel. Fell 2 trolls in the Ancient Ruins and prove them wrong.",
+				"intro": "They say troll hide turns my best steel. Fell 2 trolls and prove them wrong.",
+				"outro": "Galt: Troll-tested, then. I will hammer that boast into the next breastplate I sell you.",
 				"reward_coins": 50, "reward_xp": 35 },
 	},
 	{
 		# Sela inherited the ring trade from poor Dolm's ashes.
 		"name": "Sela the jeweler",   "short": "Sela",  "symbol": "bag",
 		"stock": ["ring", "sring", "gring", "pendant", "amulet"],
-		"greet": "Sela: Gems from the caravan, fresh this week.",
+		"greet": "Sela: Gems from the caravan - the last one, until the roads are safe again.",
 		"quest": { "desc": "Bring me 30 coins", "type": "coins", "need": 30,
 				"intro": "The caravan finally came - and emptied my coffers. Invest 30 coins and keep the first piece I finish?",
+				"outro": "Sela: An investor with dirty boots. The caravan masters would faint. Here - your dividend.",
 				"reward_items": { "gring": 1 }, "reward_xp": 30 },
 	},
 	{
@@ -434,6 +448,7 @@ const WEST_VENDORS := [
 		"greet": "Odo: Arrows are out of fashion. Wands, now...",
 		"quest": { "desc": "Kill 6 skeletons", "type": "kill", "target": "s", "need": 6,
 				"intro": "Nobody buys arrows anymore, so I carve wands. Good bone is scarce - shatter 6 skeletons for me?",
+				"outro": "Odo: Good bone, this. If arrows ever come back into fashion, I owe you a quiver.",
 				"reward_coins": 40, "reward_xp": 30 },
 	},
 	{
@@ -442,6 +457,7 @@ const WEST_VENDORS := [
 		"greet": "Ivy: The good barrel is always the next one.",
 		"quest": { "desc": "Bring me 15 coins", "type": "coins", "need": 15,
 				"intro": "The first batch needs better barrels than I can afford. Spare 15 coins for the cause?",
+				"outro": "Ivy: To barrels, to bravery! The first pour is yours when the batch matures.",
 				"reward_items": { "gmpotion": 2 }, "reward_xp": 20 },
 	},
 	{
@@ -449,7 +465,8 @@ const WEST_VENDORS := [
 		"stock": ["tpscroll"],
 		"greet": "Sable: Ink, wax, and ways home. Scrolls for the prepared.",
 		"quest": { "desc": "Kill 4 wraiths", "type": "kill", "target": "y", "need": 4,
-				"intro": "My portal ink calls for wraith-essence. Put 4 of the crypt's wraiths to rest for me?",
+				"intro": "My portal ink calls for wraith-essence. Put 4 wraiths to rest for me - the crypt is full of them, and worse marches in the north.",
+				"outro": "Sable: Wraith-essence... the ink almost writes itself now. Take these, and always leave a way home open.",
 				"reward_items": { "tpscroll": 3 }, "reward_xp": 30 },
 	},
 ]
@@ -1018,7 +1035,7 @@ func _generate_map(id: String) -> Dictionary:
 
 	# 6b. Westmere: a larger village. Eight vendor houses in two rows,
 	# the temple at the bottom, an east gate back to town, and a
-	# boarded-up north gate (a future region, work in progress).
+	# north gate to the Reaches (boarded until the story opens it).
 	if id == "west":
 		for y in range(4, 32):
 			for x in range(5, 45):
@@ -1448,20 +1465,27 @@ func _handle_click(mp: Vector2) -> void:
 		Mode.WORLDMAP:
 			_close_panel()
 
-# The HUD buttons. Geometry is shared with hud.gd via
-# bar_button_rects(), so drawing and hit-testing can never drift apart.
+# The HUD buttons, stacked in two rows of three on the bar's right
+# edge so they claim a narrow column instead of a full-width strip.
+# Geometry is shared with hud.gd via bar_button_rects(), so drawing
+# and hit-testing can never drift apart; bar_buttons_left() is the
+# left edge of the column, which the message log must never cross.
 const BAR_BUTTONS := ["Inventory (I)", "Journal (J)", "Spells (P)", "Map (M)", "Options (O)"]
+const BAR_BTN_W := 92.0
+const BAR_BTN_H := 26.0
+const BAR_BTN_GAP := 5.0
+
+func bar_buttons_left() -> float:
+	return get_viewport_rect().size.x - (BAR_BTN_W + BAR_BTN_GAP) * 3.0 - 6.0
 
 func bar_button_rects() -> Array:
 	var vs := get_viewport_rect().size
-	var bw := 92.0
-	var bh := 26.0
-	var gap := 5.0
-	var x := vs.x - (bw + gap) * BAR_BUTTONS.size() - 4.0
-	var y := vs.y - BAR_H + 50.0
+	var x0 := bar_buttons_left()
+	var y0 := vs.y - BAR_H + 12.0
 	var rects := []
 	for i in BAR_BUTTONS.size():
-		rects.append(Rect2(x + i * (bw + gap), y, bw, bh))
+		rects.append(Rect2(x0 + (i % 3) * (BAR_BTN_W + BAR_BTN_GAP),
+				y0 + (i / 3) * (BAR_BTN_H + 6.0), BAR_BTN_W, BAR_BTN_H))
 	return rects
 
 func _bar_click(mp: Vector2) -> bool:
@@ -2080,7 +2104,11 @@ func _talk_to_vendor(index: int) -> void:
 		_refresh()
 		return
 	else:
-		_log(data["greet"])
+		# refugees speak of the fire, not of business as usual
+		var greet: String = data["greet"]
+		if town_burned and data.has("greet_burned"):
+			greet = data["greet_burned"]
+		_log(greet)
 
 	current_shop = gidx
 	shop_index = 0
@@ -2115,6 +2143,8 @@ func _complete_quest(q: Dictionary) -> void:
 	q["state"] = "done"
 	_sfx("quest")
 	_log("Quest complete: %s! Reward: %s." % [q["desc"], ", ".join(reward_bits)])
+	if q.has("outro"):
+		_log(q["outro"])
 	_gain_xp(q["reward_xp"])
 	if q.get("target", "") == "parchment":
 		_open_fortress_road()
