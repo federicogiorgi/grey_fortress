@@ -30,7 +30,7 @@ extends Node2D
 #  v4: unique vendors, sell/buyback, victory, clickable HUD.
 # =============================================================
 
-enum Mode { TITLE, INTRO, PLAY, INVENTORY, JOURNAL, SHOP, OPTIONS, SPELLBOOK, WORLDMAP }
+enum Mode { TITLE, INTRO, PLAY, INVENTORY, JOURNAL, SHOP, OPTIONS, SPELLBOOK, WORLDMAP, LOG }
 
 const TILE := 32
 const BAR_H := 84                 # must match hud.gd
@@ -554,7 +554,7 @@ var keymap := {
 	"wait": [KEY_SPACE, KEY_NONE], "character": [KEY_I, KEY_NONE],
 	"journal": [KEY_J, KEY_NONE], "options": [KEY_O, KEY_NONE],
 	"spell": [KEY_KP_5, KEY_NONE], "spellbook": [KEY_P, KEY_NONE],
-	"map": [KEY_M, KEY_NONE],
+	"map": [KEY_M, KEY_NONE], "log": [KEY_L, KEY_NONE],
 }
 
 # The first bound cast key, for UI hints ("Kp 5 casts").
@@ -703,7 +703,7 @@ func _start(from_title := false) -> void:
 		quests.append(q)
 	_load_map("town", "spawn")
 	_log("Welcome to Grey Fortress.")
-	_log("Arrows/WASD move. I character, J journal, P spells, M map, O options.")
+	_log("Arrows/WASD move. I character, J journal, P spells, M map, L log, O options.")
 	_update_music()
 	if from_title and not skip_intro:
 		mode = Mode.INTRO
@@ -1349,6 +1349,16 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
 		_handle_right_click()
 		return
+	# Mouse wheel scrolls the message log panel.
+	if event is InputEventMouseButton and event.pressed and mode == Mode.LOG:
+		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
+			log_scroll += 3
+			_refresh()
+			return
+		if event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			log_scroll = max(log_scroll - 3, 0)
+			_refresh()
+			return
 	if event is InputEventMouseMotion and mode == Mode.OPTIONS and opt_slider_dragging:
 		_options_click(event.position, false)
 		return
@@ -1395,6 +1405,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			_spellbook_input(event.keycode)
 		Mode.WORLDMAP:
 			_close_panel()
+		Mode.LOG:
+			_log_panel_input(event)
 
 # Right click mirrors Esc everywhere by forwarding KEY_ESCAPE to the
 # same per-mode handlers the keyboard uses: it closes panels, steps
@@ -1431,6 +1443,8 @@ func _handle_right_click() -> void:
 			_spellbook_input(KEY_ESCAPE)
 		Mode.WORLDMAP:
 			_close_panel()
+		Mode.LOG:
+			_log_panel_escape()
 
 # All left-clicks funnel through here. Movement is deliberately NOT
 # mouse-driven: clicks only operate the UI (HUD buttons and panels).
@@ -1466,6 +1480,8 @@ func _handle_click(mp: Vector2) -> void:
 			_spellbook_click(mp)
 		Mode.WORLDMAP:
 			_close_panel()
+		Mode.LOG:
+			pass   # wheel scrolls it; Esc or right click closes
 
 # The HUD buttons, stacked in two rows of three on the bar's right
 # edge so they claim a narrow column instead of a full-width strip.
@@ -1491,6 +1507,14 @@ func bar_button_rects() -> Array:
 	return rects
 
 func _bar_click(mp: Vector2) -> bool:
+	# Clicking the message column of the bar opens the full log.
+	var vs := get_viewport_rect().size
+	if Rect2(350.0, vs.y - BAR_H + 4.0, max(bar_buttons_left() - 358.0, 0.0), BAR_H - 8.0).has_point(mp):
+		if mode == Mode.LOG:
+			_close_panel()
+		else:
+			_open_log()
+		return true
 	var rects := bar_button_rects()
 	var targets := [Mode.INVENTORY, Mode.JOURNAL, Mode.SPELLBOOK, Mode.WORLDMAP, Mode.OPTIONS]
 	for i in rects.size():
@@ -1550,6 +1574,8 @@ func _play_input(key: int) -> void:
 	elif key_is("map", key):
 		mode = Mode.WORLDMAP
 		_refresh()
+	elif key_is("log", key):
+		_open_log()
 	elif key_is("spell", key):
 		_begin_targeting()
 	elif key_is("wait", key):
@@ -2636,11 +2662,11 @@ const OPT_MAIN := ["Graphics", "Sound", "Keybinds", "Intro story", "Save Game", 
 const REBIND_ACTIONS := ["up", "down", "left", "right",
 		"up_left", "up_right", "down_left", "down_right",
 		"wait", "character", "journal", "options",
-		"spell", "spellbook", "map"]
+		"spell", "spellbook", "map", "log"]
 const REBIND_LABELS := ["Move up", "Move down", "Move left", "Move right",
 		"Move up-left", "Move up-right", "Move down-left", "Move down-right",
 		"Wait", "Character sheet", "Quest journal", "Options menu",
-		"Cast spell", "Spellbook", "World map"]
+		"Cast spell", "Spellbook", "World map", "Message log"]
 
 func _options_input(key: int) -> void:
 	if opt_rebinding:
@@ -3027,12 +3053,63 @@ func _vendor_at(p: Vector2i) -> int:
 
 
 # ---------------------------------------------------------
-#  Messages
+#  Messages. The bar shows the tail; the full history lives in
+#  the scrollable, searchable log panel (L).
 # ---------------------------------------------------------
+const LOG_KEEP := 300   # how much history the log panel remembers
+
+var log_scroll := 0     # lines scrolled up from the bottom
+var log_search := ""    # live filter typed inside the log panel
+
 func _log(text: String) -> void:
 	messages.append(text)
-	if messages.size() > 8:
+	if messages.size() > LOG_KEEP:
 		messages.pop_front()
+
+func _open_log() -> void:
+	mode = Mode.LOG
+	log_scroll = 0
+	log_search = ""
+	_refresh()
+
+# Esc (and right click) inside the log: clear the search first,
+# close the panel second.
+func _log_panel_escape() -> void:
+	if log_search != "":
+		log_search = ""
+		log_scroll = 0
+		_refresh()
+	else:
+		_close_panel()
+
+# The log panel takes the whole keyboard: arrows and PgUp/PgDn
+# scroll, Home/End jump, Backspace edits, and every printable key
+# types into the search box (so W/S type rather than scroll).
+func _log_panel_input(event: InputEventKey) -> void:
+	match event.keycode:
+		KEY_ESCAPE:
+			_log_panel_escape()
+			return
+		KEY_UP:
+			log_scroll += 1
+		KEY_DOWN:
+			log_scroll = max(log_scroll - 1, 0)
+		KEY_PAGEUP:
+			log_scroll += 10
+		KEY_PAGEDOWN:
+			log_scroll = max(log_scroll - 10, 0)
+		KEY_HOME:
+			log_scroll = 1 << 20   # the renderer clamps this to the top
+		KEY_END:
+			log_scroll = 0
+		KEY_BACKSPACE:
+			log_search = log_search.substr(0, max(log_search.length() - 1, 0))
+			log_scroll = 0
+		_:
+			if event.unicode >= 32:
+				log_search += char(event.unicode)
+				log_scroll = 0
+	_refresh()
 
 
 # ---------------------------------------------------------

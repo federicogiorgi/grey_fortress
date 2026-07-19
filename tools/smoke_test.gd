@@ -244,6 +244,24 @@ func _run(game: Node2D) -> void:
 	_check(game.current_map == "thorn", "the road north leads into Thornwood")
 	_check(game.mobs.size() > 0, "Thornwood is populated")
 
+	# the message log: opens, types-to-search, Esc clears then closes
+	game._open_log()
+	_check(game.mode == game.Mode.LOG, "the message log opens")
+	var kev := InputEventKey.new()
+	kev.keycode = KEY_R
+	kev.unicode = 114
+	game._log_panel_input(kev)
+	_check(game.log_search == "r", "typing filters the log")
+	var kesc := InputEventKey.new()
+	kesc.keycode = KEY_ESCAPE
+	game._log_panel_input(kesc)
+	_check(game.log_search == "" and game.mode == game.Mode.LOG, "Esc clears the search first")
+	game._log_panel_input(kesc)
+	_check(game.mode == game.Mode.PLAY, "Esc then closes the log")
+	for i in 400:
+		game._log("filler line %d" % i)
+	_check(game.messages.size() == game.LOG_KEEP, "history caps at LOG_KEEP messages")
+
 	# the intro parchment: shown for title-screen runs, skippable forever
 	game.skip_intro = false
 	game._start(true)

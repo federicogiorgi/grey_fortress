@@ -77,6 +77,11 @@ Movement is keyboard-only; the mouse operates the UI.
 - I: character sheet (equipment paper-doll left, backpack right;
   arrows navigate, Left/Right switch side, Enter equips/uses/removes)
 - J: quest journal
+- L: message log — the full scrolling history (last 300 lines).
+  Scroll with the mouse wheel, arrows, PgUp/PgDn or Home/End; just
+  type to search it live (Backspace edits; Esc clears the search
+  first and closes second). Clicking the log area of the HUD bar
+  opens it too
 - Esc: close panels / open options
 - Right click: universal "go back" — everything Esc dismisses, it
   dismisses too (close any panel, step an options sub-screen back,

@@ -35,6 +35,8 @@ func _draw() -> void:
 			_draw_panel_spellbook()
 		game.Mode.WORLDMAP:
 			_draw_panel_worldmap()
+		game.Mode.LOG:
+			_draw_panel_log()
 	if game.mode == game.Mode.PLAY and game.targeting:
 		_draw_targeting()
 	if game.banner_timer > 0.0 and game.mode != game.Mode.INTRO:
@@ -640,6 +642,69 @@ func _draw_targeting() -> void:
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0, 0, 0, 0.7))
 	draw_string(font, Vector2((vs.x - hw) * 0.5, 24), hint,
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.92, 0.88, 0.72))
+
+
+# ---------------- message log panel (L) ----------------
+# The full message history: scrollable (wheel, arrows, PgUp/PgDn,
+# Home/End) and searchable - anything typed filters the log live.
+# Filtering + wrapping are cached on (count, width, query).
+var _logpanel_key := ""
+var _logpanel_lines: Array = []
+
+func _draw_panel_log() -> void:
+	var vs := get_viewport_rect().size
+	var w: float = min(vs.x - 200.0, 980.0)
+	var h: float = vs.y - BAR_H - 80.0
+	var p := _panel(w, h, "Message Log")
+	var maxw := w - 60.0
+	var key := "%d|%d|%s" % [game.messages.size(), int(maxw), game.log_search]
+	if key != _logpanel_key:
+		_logpanel_key = key
+		_logpanel_lines = []
+		var query: String = game.log_search.to_lower()
+		for m in game.messages:
+			if query != "" and not (m as String).to_lower().contains(query):
+				continue
+			_logpanel_lines.append_array(_wrap_text(m, 14, maxw))
+	var lines: Array = _logpanel_lines
+
+	# search box under the title
+	var searching: bool = game.log_search != ""
+	draw_string(font, Vector2(p.x + 16, p.y + 50), "Search: %s_" % game.log_search,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 13,
+			Color(0.95, 0.85, 0.45) if searching else Color(0.55, 0.55, 0.62))
+	if searching:
+		var found := "%d matching line%s" % [lines.size(), "" if lines.size() == 1 else "s"]
+		var fw: float = font.get_string_size(found, HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x
+		draw_string(font, Vector2(p.x + w - fw - 20, p.y + 50), found,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.72, 0.72, 0.62))
+
+	# the visible window of lines, newest at the bottom
+	var top := p.y + 76.0
+	var line_h := 19.0
+	var visible: int = int((h - 122.0) / line_h)
+	var max_scroll: int = max(lines.size() - visible, 0)
+	game.log_scroll = clamp(game.log_scroll, 0, max_scroll)
+	var start: int = max(lines.size() - visible - game.log_scroll, 0)
+	if lines.is_empty():
+		draw_string(font, Vector2(p.x + 24, top + 4), "Nothing matches." if searching else "Nothing yet.",
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.55, 0.55, 0.62))
+	for i in range(start, min(start + visible, lines.size())):
+		draw_string(font, Vector2(p.x + 24, top + (i - start) * line_h), lines[i],
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.82, 0.82, 0.85))
+
+	# a thin scrollbar when there is more than one screenful
+	if lines.size() > visible:
+		var track := Rect2(p.x + w - 16, top - 12, 6, visible * line_h)
+		draw_rect(track, Color(0.14, 0.14, 0.18))
+		var thumb_h: float = max(track.size.y * visible / lines.size(), 14.0)
+		var thumb_y: float = track.position.y \
+				+ (track.size.y - thumb_h) * (float(start) / max_scroll if max_scroll > 0 else 1.0)
+		draw_rect(Rect2(track.position.x, thumb_y, 6, thumb_h), Color(0.45, 0.45, 0.55))
+
+	draw_string(font, Vector2(p.x + 16, p.y + h - 16),
+			"Type to search - Backspace edits - wheel / arrows / PgUp / PgDn scroll - Esc clears the search, then closes.",
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.5, 0.5, 0.58))
 
 
 # ---------------- quest journal ----------------
