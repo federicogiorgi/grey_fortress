@@ -190,10 +190,12 @@ its entrance tile.
   "Entering..." banner, from the Northern Wilds (Lv 1) to the
   Fortress Approach (Lv 10); mobs are tuned to match
 - Magic: three spells for now — Magic Dart (3 mana, 2 damage,
-  range 7), Bone Arrow (5 mana, 3 damage, range 9) and Fire Boulder
-  (7 mana, 5 damage, range 5); projectiles animate to the target,
-  rotated to point at it (spells only hit monsters for now;
-  interacting with the environment is planned)
+  range 7), Bone Arrow (4 mana, 1 damage, range 14 — weak, but it
+  flies half across the world) and Fire Ball (10 mana, 5 damage,
+  range 7, bursting on a full 3x3 area — the aim overlay previews
+  the blast square); projectiles animate to the target, rotated to
+  point at it (spells only hit monsters for now; interacting with
+  the environment is planned)
 - Spell damage as a stat: wands (sold by Odo in Westmere) occupy
   the Ranged slot and add +1/+2 damage to every spell; the
   spellbook and character sheet show the bonus

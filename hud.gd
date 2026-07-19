@@ -663,6 +663,12 @@ func _draw_targeting() -> void:
 		draw_line(player_screen, spos + Vector2(game.TILE, game.TILE) * 0.5,
 				Color(col.r, col.g, col.b, 0.35), 2.0)
 		draw_rect(Rect2(spos, Vector2(game.TILE, game.TILE)), col, false, 2.0)
+		# blast spells preview their full burst area around the tile
+		var aoe: int = game.SPELLS[game.active_spell].get("aoe", 0)
+		if aoe > 0:
+			var side := float(game.TILE) * (1 + 2 * aoe)
+			draw_rect(Rect2(spos - Vector2(aoe, aoe) * float(game.TILE), Vector2(side, side)),
+					Color(col.r, col.g, col.b, 0.55), false, 1.5)
 	game.draw_projectile_icon(self, game.active_spell, mp, 0.0, 1.5)
 	var hint := "Click a tile to cast. Esc or right click cancels."
 	var hw: float = font.get_string_size(hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x

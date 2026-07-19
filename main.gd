@@ -189,13 +189,15 @@ const RAIN_CHANCE := 0.10
 # ---- magic ------------------------------------------------
 # The active spell is cast with 5 (or middle mouse), then a click on
 # the target tile. The spellbook (P) picks the active spell.
+# "aoe" is a blast radius in tiles: 1 means the impact tile and its
+# eight neighbors (a 3x3 burst) all take the damage.
 const SPELLS := {
 	"dart": { "name": "Magic Dart", "mana": 3, "dmg": 2, "range": 7,
 			"desc": "A dart of pure force. Barely kills a rat." },
-	"arrow": { "name": "Bone Arrow", "mana": 5, "dmg": 3, "range": 9,
-			"desc": "A whistling shaft of bone. Kills a goblin outright." },
-	"boulder": { "name": "Fire Boulder", "mana": 7, "dmg": 5, "range": 5,
-			"desc": "A tumbling mass of flame. Fells a wild boar." },
+	"arrow": { "name": "Bone Arrow", "mana": 4, "dmg": 1, "range": 14,
+			"desc": "A whistling sliver of bone. Weak, but flies half across the world." },
+	"boulder": { "name": "Fire Ball", "mana": 10, "dmg": 5, "range": 7, "aoe": 1,
+			"desc": "A roaring burst of flame, searing a full 3x3 area." },
 }
 const SPELL_ORDER := ["dart", "arrow", "boulder"]
 
@@ -1897,12 +1899,20 @@ func _advance_projectiles(delta: float) -> void:
 		var kind: String = p["kind"]
 		var verb: String = {
 			"dart": "The magic dart hits", "arrow": "The bone arrow pierces",
-			"boulder": "The fire boulder scorches",
+			"boulder": "The fireball engulfs",
 		}[kind]
-		var mi := _mob_at(p["target"])
-		if mi >= 0:
-			_damage_mob(mi, p["dmg"], verb)
-		else:
+		# Blast spells damage every mob within their radius of the
+		# impact tile; single-target spells have radius 0. Iterate
+		# backwards: kills remove mobs from the array.
+		var radius: int = SPELLS[kind].get("aoe", 0)
+		var target: Vector2i = p["target"]
+		var hit_any := false
+		for m in range(mobs.size() - 1, -1, -1):
+			var mp: Vector2i = mobs[m]["pos"]
+			if max(abs(mp.x - target.x), abs(mp.y - target.y)) <= radius:
+				hit_any = true
+				_damage_mob(m, p["dmg"], verb)
+		if not hit_any:
 			_log("The %s hits nothing." % SPELLS[kind]["name"].to_lower())
 		_end_turn()
 

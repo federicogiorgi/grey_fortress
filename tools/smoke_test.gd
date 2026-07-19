@@ -200,6 +200,28 @@ func _run(game: Node2D) -> void:
 			"stepping through returns you to the cast tile")
 	_check(game.portal.is_empty(), "the portal closes after the round trip")
 
+	# spell rebalance: Fire Ball bursts 3x3, Bone Arrow snipes far
+	var fb: Dictionary = game.SPELLS["boulder"]
+	_check(fb["name"] == "Fire Ball" and fb["mana"] == 10 and fb["dmg"] == 5 \
+			and fb["range"] == 7 and fb["aoe"] == 1, "Fire Ball has its new stats")
+	var ba: Dictionary = game.SPELLS["arrow"]
+	_check(ba["mana"] == 4 and ba["dmg"] == 1 and ba["range"] == 14,
+			"Bone Arrow is the long-range sniper")
+	# two rats a tile apart die to one blast
+	for dx in 5:
+		game.grid[game.player_pos.y][game.player_pos.x + dx] = "."
+		game.grid[game.player_pos.y + 1][game.player_pos.x + dx] = "."
+	game.mobs = [
+		{ "pos": game.player_pos + Vector2i(3, 0), "hp": 2, "type": "r" },
+		{ "pos": game.player_pos + Vector2i(4, 1), "hp": 2, "type": "r" },
+	]
+	game.active_spell = "boulder"
+	game.player_mana = 20
+	game._fire_at(game.player_pos + Vector2i(3, 0))
+	game._advance_projectiles(10.0)   # let the shot land
+	_check(game.mobs.is_empty(), "the Fire Ball catches the whole 3x3 blast")
+	_check(game.player_mana == 10, "the blast cost 10 mana")
+
 	# the fall of Grey Fortress: returning with the parchment burns it
 	_check(not game.town_burned, "the town starts whole")
 	game._add_item("parchment")
