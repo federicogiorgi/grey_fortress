@@ -49,6 +49,10 @@ any key turns it over, and an Options toggle skips it forever.
 
 ## How to run
 
+Grab a ready-made Windows build from the
+[Releases page](https://github.com/federicogiorgi/grey_fortress/releases)
+— or run from source:
+
 1. Install Godot 4.2+ (standard version) from godotengine.org.
 2. Open Godot, Import, select `project.godot`, press F5.
 
@@ -67,6 +71,27 @@ Stamping the icon into an EXE requires **rcedit**, a one-time setup:
 After that, every Project > Export produces an EXE with the icon
 (if Explorer still shows the old one, its icon cache is stale —
 rename the file once or run `ie4uinit.exe -show`).
+
+### Publishing a build
+
+Builds are distributed through GitHub Releases, never committed to
+the repo (the raw EXE brushes GitHub's 100 MB per-file limit, and
+committed binaries bloat the git history forever — the .gitignore
+enforces this). After exporting:
+
+1. Zip the EXE (about 37 MB instead of ~100).
+2. Either drag the zip onto a new release at
+   github.com/federicogiorgi/grey_fortress/releases/new, or with
+   the GitHub CLI (`winget install GitHub.cli`, `gh auth login`,
+   one-time):
+
+   ```
+   gh release create v11 "Grey Fortress-win64.zip" \
+       --title "Grey Fortress v11" --notes "What changed..."
+   ```
+
+The `releases/latest` URL always points players at the newest
+build, and each release shows download counts.
 
 ## Controls
 
