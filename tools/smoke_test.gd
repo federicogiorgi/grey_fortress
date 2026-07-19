@@ -108,6 +108,11 @@ func _run(game: Node2D) -> void:
 				hosts = true
 		_check(hosts, "%s hosts a Westmere quest target" % id)
 
+	# the sealed fortress gate stands in the town's east wall
+	var tst: Dictionary = game._generate_map("town")
+	_check(tst["grid"][15][41] == "G" and tst["grid"][16][41] == "G",
+			"the sealed fortress gate faces east from town")
+
 	# the ruins stairway sits inside its shrine
 	var rst: Dictionary = game._generate_map("ruins")
 	_check(rst["grid"][23][99] == "O", "the ruins stairway sits at the shrine's heart")
@@ -202,6 +207,7 @@ func _run(game: Node2D) -> void:
 	_check(game.vendors.is_empty(), "the burned town is deserted")
 	_check(game.map_state["town"]["west_gate"].x >= 0, "the west gate hangs broken open")
 	_check(game.altar_positions.size() > 0, "the temple altar survived the fire")
+	_check(game.grid[15][41] == "G", "the fortress gate outlasts the fire")
 	_check(game.map_name("town") == "Ruins of Grey Fortress", "the town is renamed in its ruin")
 	_check(game.portal_home() == "west", "portals now lead to Westmere")
 

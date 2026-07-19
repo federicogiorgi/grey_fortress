@@ -284,7 +284,9 @@ Public domain (CC0).
 
 - A third dungeon level below Bone Hollow, with a boss guarding it
 - The Grey Fortress itself, at the end of the Fortress Approach —
-  the place the parchment's Covenant no longer seals
+  the place the parchment's Covenant no longer seals (its broken
+  east road, visible from town's sealed gate, may one day be
+  crossable by flight or magic)
 - Quests and points of interest inside the Northern Reaches
   (outposts, a hermit, things worth finding off the roads)
 - Spells that interact with the environment (burning trees,
