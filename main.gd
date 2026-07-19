@@ -1365,7 +1365,12 @@ func _unhandled_input(event: InputEvent) -> void:
 		_options_click(event.position, false)
 		return
 
-	if not (event is InputEventKey and event.pressed and not event.echo):
+	# Key-repeat (echo) events are dropped everywhere except inside
+	# the message log, which behaves like a text field: a held
+	# Backspace keeps deleting, held arrows keep scrolling.
+	if not (event is InputEventKey and event.pressed):
+		return
+	if event.echo and mode != Mode.LOG:
 		return
 
 	if event.keycode == KEY_F11:

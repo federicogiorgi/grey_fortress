@@ -252,12 +252,28 @@ func _run(game: Node2D) -> void:
 	kev.unicode = 114
 	game._log_panel_input(kev)
 	_check(game.log_search == "r", "typing filters the log")
+	# held Backspace repeats: echo key events reach the log panel
+	game.log_search = "grey"
+	var kbs := InputEventKey.new()
+	kbs.keycode = KEY_BACKSPACE
+	kbs.pressed = true
+	kbs.echo = true
+	game._unhandled_input(kbs)
+	game._unhandled_input(kbs)
+	_check(game.log_search == "gr", "holding Backspace keeps deleting")
 	var kesc := InputEventKey.new()
 	kesc.keycode = KEY_ESCAPE
 	game._log_panel_input(kesc)
 	_check(game.log_search == "" and game.mode == game.Mode.LOG, "Esc clears the search first")
 	game._log_panel_input(kesc)
 	_check(game.mode == game.Mode.PLAY, "Esc then closes the log")
+	# outside the log, echoes stay ignored (no held-key panel spam)
+	var kecho := InputEventKey.new()
+	kecho.keycode = KEY_I
+	kecho.pressed = true
+	kecho.echo = true
+	game._unhandled_input(kecho)
+	_check(game.mode == game.Mode.PLAY, "echo keys stay ignored outside the log")
 	for i in game.LOG_KEEP + 100:
 		game._log("filler line %d" % i)
 	_check(game.messages.size() == game.LOG_KEEP, "history caps at LOG_KEEP messages")
